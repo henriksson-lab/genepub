@@ -127,7 +127,7 @@ feature_pmidcount <- within(feature_pmidcount, rm(pmid_count))
 
 
 ### Read what cell types we reduce to
-update_for_FACS_onth <- unique(read.csv(file = "input/tabula_muris/celltypes_tissue_to_collapse.csv", stringsAsFactors = FALSE)[,-(1:2)])
+update_for_FACS_onth <- unique(read.csv(file = "input/celltypes_tissue_to_collapse.csv", stringsAsFactors = FALSE)[,-(1:2)])
 colnames(update_for_FACS_onth)[1]<- "cell_ontology_class"
 
 ### Read cell type annotation

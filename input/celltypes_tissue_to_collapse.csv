@@ -1,0 +1,118 @@
+,tissue,celltype,collapsed
+0610005C13Rik,Aorta-counts.csv,fibroblast,fibroblast
+0610005C13Rik1,Aorta-counts.csv,erythrocyte,erythrocyte
+0610005C13Rik2,Aorta-counts.csv,professional antigen presenting cell,professional antigen presenting cell
+0610005C13Rik3,Aorta-counts.csv,endothelial cell,endothelial cell
+0610005C13Rik4,Bladder-counts.csv,bladder cell,bladder cell
+0610005C13Rik5,Bladder-counts.csv,bladder urothelial cell,bladder cell
+0610005C13Rik6,Brain_Myeloid-counts.csv,microglial cell,glial cell
+0610005C13Rik7,Brain_Myeloid-counts.csv,macrophage,macrophage
+0610005C13Rik8,Brain_Non-Myeloid-counts.csv,Bergmann glial cell,glial cell
+0610005C13Rik9,Brain_Non-Myeloid-counts.csv,oligodendrocyte,oligodendrocyte
+0610005C13Rik10,Brain_Non-Myeloid-counts.csv,neuron,neuron
+0610005C13Rik11,Brain_Non-Myeloid-counts.csv,oligodendrocyte precursor cell,oligodendrocyte
+0610005C13Rik12,Brain_Non-Myeloid-counts.csv,astrocyte,astrocyte
+0610005C13Rik13,Brain_Non-Myeloid-counts.csv,endothelial cell,endothelial cell
+0610005C13Rik14,Brain_Non-Myeloid-counts.csv,brain pericyte,pericyte
+0610005C13Rik15,Diaphragm-counts.csv,skeletal muscle satellite stem cell,stem cell
+0610005C13Rik16,Diaphragm-counts.csv,mesenchymal stem cell,stem cell
+0610005C13Rik17,Diaphragm-counts.csv,endothelial cell,endothelial cell
+0610005C13Rik18,Diaphragm-counts.csv,lymphocyte,lymphocyte
+0610005C13Rik19,Diaphragm-counts.csv,macrophage,macrophage
+0610005C13Rik20,Fat-counts.csv,myeloid cell,myeloid cell
+0610005C13Rik21,Fat-counts.csv,T cell,T cell
+0610005C13Rik22,Fat-counts.csv,B cell,B cell
+0610005C13Rik23,Fat-counts.csv,mesenchymal stem cell of adipose,stem cell
+0610005C13Rik24,Fat-counts.csv,endothelial cell,endothelial cell
+0610005C13Rik26,Fat-counts.csv,natural killer cell,natural killer cell
+0610005C13Rik27,Heart-counts.csv,fibroblast,fibroblast
+0610005C13Rik28,Heart-counts.csv,endothelial cell,endothelial cell
+0610005C13Rik29,Heart-counts.csv,myofibroblast cell,myofibroblast cell
+0610005C13Rik30,Heart-counts.csv,endocardial cell,endocardial cell
+0610005C13Rik31,Heart-counts.csv,leukocyte,leukocyte
+0610005C13Rik32,Heart-counts.csv,smooth muscle cell,muscle cell
+0610005C13Rik33,Heart-counts.csv,cardiac muscle cell,muscle cell
+0610005C13Rik35,Kidney-counts.csv,kidney collecting duct epithelial cell,kidney  epithelial cell
+0610005C13Rik36,Kidney-counts.csv,epithelial cell of proximal tubule,kidney  epithelial cell
+0610005C13Rik37,Kidney-counts.csv,endothelial cell,endothelial cell
+0610005C13Rik38,Kidney-counts.csv,macrophage,macrophage
+0610005C13Rik39,Kidney-counts.csv,leukocyte,leukocyte
+0610005C13Rik40,Large_Intestine-counts.csv,epithelial cell of large intestine,large intestine cell
+0610005C13Rik41,Large_Intestine-counts.csv,enterocyte of epithelium of large intestine,large intestine cell
+0610005C13Rik42,Large_Intestine-counts.csv,large intestine goblet cell,large intestine cell
+0610005C13Rik43,Large_Intestine-counts.csv,Brush cell of epithelium proper of large intestine,large intestine cell
+0610005C13Rik44,Large_Intestine-counts.csv,enteroendocrine cell,enteroendocrine cell
+0610005C13Rik45,Limb_Muscle-counts.csv,mesenchymal stem cell,stem cell
+0610005C13Rik46,Limb_Muscle-counts.csv,skeletal muscle satellite cell,stem cell
+0610005C13Rik47,Limb_Muscle-counts.csv,endothelial cell,endothelial cell
+0610005C13Rik48,Limb_Muscle-counts.csv,B cell,B cell
+0610005C13Rik49,Limb_Muscle-counts.csv,macrophage,macrophage
+0610005C13Rik50,Limb_Muscle-counts.csv,T cell,T cell
+0610005C13Rik51,Liver-counts.csv,natural killer cell,natural killer cell
+0610005C13Rik52,Liver-counts.csv,hepatocyte,hepatocyte
+0610005C13Rik53,Liver-counts.csv,Kupffer cell,macrophage
+0610005C13Rik54,Liver-counts.csv,endothelial cell of hepatic sinusoid,endothelial cell
+0610005C13Rik55,Liver-counts.csv,B cell,B cell
+0610005C13Rik57,Lung-counts.csv,stromal cell,stromal cell
+0610005C13Rik58,Lung-counts.csv,epithelial cell of lung,lung epithelial cell
+0610005C13Rik59,Lung-counts.csv,lung endothelial cell,endothelial cell
+0610005C13Rik60,Lung-counts.csv,B cell,B cell
+0610005C13Rik61,Lung-counts.csv,leukocyte,leukocyte
+0610005C13Rik62,Lung-counts.csv,monocyte,monocyte
+0610005C13Rik63,Lung-counts.csv,T cell,T cell
+0610005C13Rik64,Lung-counts.csv,classical monocyte,monocyte
+0610005C13Rik65,Lung-counts.csv,ciliated columnar cell of tracheobronchial tree,ciliated cell
+0610005C13Rik66,Lung-counts.csv,myeloid cell,myeloid cell
+0610005C13Rik67,Lung-counts.csv,natural killer cell,natural killer cell
+0610005C13Rik68,Mammary_Gland-counts.csv,luminal epithelial cell of mammary gland,luminal epithelial cell of mammary gland
+0610005C13Rik69,Mammary_Gland-counts.csv,basal cell,basal cell
+0610005C13Rik70,Mammary_Gland-counts.csv,stromal cell,stromal cell
+0610005C13Rik71,Mammary_Gland-counts.csv,endothelial cell,endothelial cell
+0610005C13Rik72,Marrow-counts.csv,immature B cell,B cell
+0610005C13Rik73,Marrow-counts.csv,late pro-B cell,B cell
+0610005C13Rik74,Marrow-counts.csv,precursor B cell,B cell
+0610005C13Rik75,Marrow-counts.csv,macrophage,macrophage
+0610005C13Rik76,Marrow-counts.csv,naive B cell,B cell
+0610005C13Rik77,Marrow-counts.csv,granulocyte,granulocyte
+0610005C13Rik78,Marrow-counts.csv,monocyte,monocyte
+0610005C13Rik79,Marrow-counts.csv,immature T cell,T cell
+0610005C13Rik80,Marrow-counts.csv,mature natural killer cell,natural killer cell
+0610005C13Rik81,Marrow-counts.csv,B cell,B cell
+0610005C13Rik82,Marrow-counts.csv,immature natural killer cell,natural killer cell
+0610005C13Rik83,Marrow-counts.csv,granulocyte monocyte progenitor cell,granulocyte
+0610005C13Rik84,Marrow-counts.csv,immature NK T cell,T cell
+0610005C13Rik85,Marrow-counts.csv,basophil,basophil
+0610005C13Rik86,Marrow-counts.csv,regulatory T cell,T cell
+0610005C13Rik87,Marrow-counts.csv,pre-natural killer cell,natural killer cell
+0610005C13Rik88,Marrow-counts.csv,Slamf1-positive multipotent progenitor cell,multipotent cell
+0610005C13Rik89,Marrow-counts.csv,granulocytopoietic cell,granulocyte
+0610005C13Rik90,Marrow-counts.csv,Slamf1-negative multipotent progenitor cell,multipotent cell
+0610005C13Rik91,Marrow-counts.csv,hematopoietic precursor cell,hematopoietic precursor cell
+0610005C13Rik92,Marrow-counts.csv,common lymphoid progenitor,common lymphoid progenitor
+0610005C13Rik93,Marrow-counts.csv,megakaryocyte-erythroid progenitor cell,common myeloid progenitor
+0610005C13Rik94,Pancreas-counts.csv,endothelial cell,endothelial cell
+0610005C13Rik95,Pancreas-counts.csv,leukocyte,leukocyte
+0610005C13Rik96,Pancreas-counts.csv,pancreatic acinar cell,pancreatic acinar cell
+0610005C13Rik97,Pancreas-counts.csv,type B pancreatic cell,type B pancreatic cell
+0610005C13Rik98,Pancreas-counts.csv,pancreatic stellate cell,myofibroblast cell
+0610005C13Rik99,Pancreas-counts.csv,pancreatic A cell,pancreatic A cell
+0610005C13Rik100,Pancreas-counts.csv,pancreatic ductal cell,pancreatic ductal cell
+0610005C13Rik101,Pancreas-counts.csv,pancreatic D cell,pancreatic D cell
+0610005C13Rik102,Pancreas-counts.csv,pancreatic PP cell,pancreatic PP cell
+0610005C13Rik103,Skin-counts.csv,keratinocyte stem cell,stem cell
+0610005C13Rik104,Skin-counts.csv,basal cell of epidermis,basal cell
+0610005C13Rik105,Skin-counts.csv,epidermal cell,epidermal cell
+0610005C13Rik106,Skin-counts.csv,stem cell of epidermis,stem cell
+0610005C13Rik107,Skin-counts.csv,leukocyte,leukocyte
+0610005C13Rik108,Spleen-counts.csv,T cell,T cell
+0610005C13Rik109,Spleen-counts.csv,B cell,B cell
+0610005C13Rik110,Spleen-counts.csv,macrophage,macrophage
+0610005C13Rik111,Thymus-counts.csv,immature T cell,T cell
+0610005C13Rik112,Thymus-counts.csv,DN1 thymic pro-T cell,T cell
+0610005C13Rik113,Thymus-counts.csv,leukocyte,leukocyte
+0610005C13Rik114,Tongue-counts.csv,keratinocyte,keratinocyte
+0610005C13Rik115,Tongue-counts.csv,basal cell of epidermis,basal cell
+0610005C13Rik116,Trachea-counts.csv,epithelial cell,epithelial cell
+0610005C13Rik117,Trachea-counts.csv,endothelial cell,endothelial cell
+0610005C13Rik118,Trachea-counts.csv,blood cell,blood cell
+0610005C13Rik119,Trachea-counts.csv,mesenchymal cell,mesenchymal cell
