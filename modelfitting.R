@@ -1,5 +1,20 @@
 library(reshape2)
 
+
+
+lm_rmse <- function(res){
+  #res<- thelm$residuals
+  RSS <- c(crossprod(res$residuals))
+  MSE <- RSS / length(res$residuals)
+  RMSE <- sqrt(MSE)
+  RMSE
+}
+
+
+
+
+
+
 allfeat <- read.csv("totfeature.csv", stringsAsFactors = FALSE)
 head(allfeat)
 
@@ -49,6 +64,7 @@ thelm <- lm(
   allfeat_red)
 round(thelm$coefficients, digits = 5)
 
+lm_rmse(thelm)
 
 #compcoef <- c("rank_exp","percentage_of_dep_cells","nearby_pmid")
 

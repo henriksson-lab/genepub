@@ -19,3 +19,7 @@ make_blastdb:
 runblast:
 	blastp -db uniprot.fa -query uniprot.fa -out results_prot.out -outfmt 6
 
+
+
+mount:
+	sshfs beagle.henlab.org:/data/henlab/project/bias/new/greta ./x

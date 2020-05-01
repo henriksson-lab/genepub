@@ -691,27 +691,35 @@ allfeat <- merge(allfeat, feature_genefam, all=TRUE)
 
 allfeat <- allfeat[!is.na(allfeat$rank_pmid),]    ########## a surprising number of missing rank PMIDs. how can this be?
 
+####### QC
+
 colnames(allfeat)
 print(length(unique(dat$gene)))
 print(nrow(allfeat))
+
+####### Write data for classification
+
 write.csv(allfeat, "totfeature.csv", row.names = FALSE)
 
+####### Write data for webserver
 
 
 
-allfeat <- feature_pmidcount
-nrow(allfeat)
-allfeat <- merge(allfeat, feature_exp, all=FALSE)
-nrow(allfeat)
-allfeat <- merge(allfeat, feature_coexp, all=FALSE)
-nrow(allfeat)
-allfeat <- merge(allfeat, feature_essentiality, all=FALSE)
-nrow(allfeat)
-allfeat <- merge(allfeat, feature_chromloc, all=FALSE)
-nrow(allfeat)
-allfeat <- merge(allfeat, feature_ppi, all=FALSE)
-nrow(allfeat)
-allfeat <- merge(allfeat, feature_genefam, all=FALSE)
-nrow(allfeat)
 
-
+############################## For debugging
+# allfeat <- feature_pmidcount
+# nrow(allfeat)
+# allfeat <- merge(allfeat, feature_exp, all=FALSE)
+# nrow(allfeat)
+# allfeat <- merge(allfeat, feature_coexp, all=FALSE)
+# nrow(allfeat)
+# allfeat <- merge(allfeat, feature_essentiality, all=FALSE)
+# nrow(allfeat)
+# allfeat <- merge(allfeat, feature_chromloc, all=FALSE)
+# nrow(allfeat)
+# allfeat <- merge(allfeat, feature_ppi, all=FALSE)
+# nrow(allfeat)
+# allfeat <- merge(allfeat, feature_genefam, all=FALSE)
+# nrow(allfeat)
+# 
+# 
