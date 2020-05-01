@@ -661,6 +661,88 @@ write.csv(
 
 
 
+
+
+#############################################################
+##############  Feature for gene family index    ############
+#############################################################
+
+
+###merge first the celltype pmid and the g2phm_genespresent
+pmid_term <- read.csv("features/keywords_pmids.csv",stringsAsFactors = FALSE)[,-1]
+genes_ct_pmid<- merge(pmid_term, g2phm_genespresent, by= "pmid")
+feature_ctranked_pmid<-read.csv("features/feature_ranked_pmid.csv", stringsAsFactors = F)
+
+
+uniques_g2phm_symbols<- unique(genes_ct_pmid$gene)
+genefam<- data.frame(
+  orig = uniques_g2phm_symbols,
+  letters_uniqued=str_extract(uniques_g2phm_symbols, "[a-zA-Z]*"), #letters until first number
+  numbers_uniqued=str_extract(uniques_g2phm_symbols, "[0-9]+"), #1st number
+  stringsAsFactors = FALSE
+)
+gene_numpaper<- sqldf("select `gene` as orig, term as ct, count(pmid) as numpaper from genes_ct_pmid group by orig, term")
+#converting numbers to numeric
+genefam$numbers_uniqued <- as.numeric(genefam$numbers_uniqued)
+#ordering rows by alfabetic order of unique letters column.
+genefam <- genefam[order(genefam$letters_uniqued),]
+
+#keeping rows which match the structure %s%s when combining letters_unique and columns unique
+genefam_character_digit <- genefam[genefam$orig==sprintf("%s%s", genefam$letters_uniqued, genefam$numbers_uniqued),]
+genefam_character_digit <- merge(genefam_character_digit,gene_numpaper,all.x = TRUE)
+#getting max index 
+genefam_common_max_index <- sqldf("select distinct `letters_uniqued`, max(`numbers_uniqued`) as max_uniqued_numbers from genefam_character_digit group by `letters_uniqued`")
+#keeping only rows whose max_uniqued_nrs is less than 2000
+genefam_common_max_index <- genefam_common_max_index[genefam_common_max_index$max_uniqued_numbers<2000,]
+# merging genefam_max with genefam to have numbers_uniqued info 
+genefam_common_max_index <- merge(genefam_common_max_index,genefam_character_digit)
+
+#ranked pmid count in feature ct ranked pmid
+#obtaining feature
+genefam_working_update= genefam_common_max_index
+
+genefam_working_update$ct_ranked = rank_by_ct(genefam_working_update,"numpaper")
+
+feature_family <- merge(
+  data.frame(
+    gene=genefam_working_update$orig,
+    family_index=genefam_working_update$numbers_uniqued,
+    founder=sprintf("%s1", genefam_working_update$letters_uniqued)
+  ),
+  data.frame(
+    founder=genefam_working_update$orig,
+    family_founder_rank_pmid=genefam_working_update$ct_ranked,
+    ct=genefam_working_update$ct
+  ))[,c("gene","family_index","family_founder_rank_pmid","ct")]
+
+feature_family <- feature_family[feature_family$family_index!=1,]
+#exporting feature
+write.csv(feature_family, "features/feature_founder_fam_rankpmid.csv", row.names = F)
+
+
+#############################################################
+##############        First year feature          ###########
+#############################################################
+
+g2phm_genespresent
+pmid_term<- read.csv("features/keywords_pmids.csv",stringsAsFactors = F)[,-1] #check
+pub_year<- read.csv("input/pubyear.csv", header=F, stringsAsFactors = F, sep="\t")[,1:2] #check
+colnames(pub_year)<- c("pmid", "year")
+
+pmids_present<- merge(g2phm_genespresent, pub_year, by = "pmid")
+pmids_present<- merge(pmids_present, pmid_term, by= "pmid")
+pmids_present= pmids_present [,-2]
+
+
+
+#get min/max year
+feature_minyear_gene_ct<- sqldf("select gene, term as ct,min(year) as min_year from pmids_present group by gene, ct")
+write.csv(feature_minyear_gene_ct, "features/feature_minyear_gene_ct.csv")
+
+
+
+
+
 ###############################################################################################################
 ########## Merge the features for the final model #############################################################
 ###############################################################################################################
