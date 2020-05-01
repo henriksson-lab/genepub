@@ -2,6 +2,7 @@ library(reshape)
 library(greta)
 library(splines)
 
+cell_type <- "T cell"
 
 
 ###############################################
@@ -163,7 +164,7 @@ for(cell_type in all_cell_type) {
   #########################################
   ## Solve for the posterior
   m <- model(intercept, coefs, sd)
-  draws <- mcmc(m, n_samples = 1000, chains = 8)  ### more later
+  draws <- mcmc(m, n_samples = 3000, chains = 8)  ### more later
   s <- summary(draws)
   
   
