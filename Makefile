@@ -23,3 +23,7 @@ runblast:
 
 mount:
 	sshfs beagle.henlab.org:/data/henlab/project/bias/new/greta ./x
+
+uploadfeature:
+	scp totfeature.csv beagle.henlab.org:/data/henlab/project/bias/new/
+	scp features/* beagle.henlab.org:/data/henlab/project/bias/new/features/

@@ -54,13 +54,13 @@ round(thecor,digits = 2)
 #   theme(axis.text.x = element_text(angle = 90)) +
 #   scale_fill_gradientn(colours = c("red","blue","white"))
 
-plot(allfeat_red$perc_dependent_cells, allfeat_red$rank_exp)
+#plot(allfeat_red$perc_dependent_cells, allfeat_red$rank_exp)
 
 
-
+################ Simplest linear model attempt
 
 thelm <- lm(
-  rank_pmid ~ rank_exp + coexp10 + perc_dependent_cells + nearby_pmid + ppi + family_index + family_founder_rank_pmid, 
+  rank_pmid ~ rank_exp + coexp10 + perc_dependent_cells + nearby_pmid + ppi + first_year + family_indexdiff + family_founder_rank, 
   allfeat_red)
 round(thelm$coefficients, digits = 5)
 

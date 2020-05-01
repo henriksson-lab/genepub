@@ -15,13 +15,13 @@ library(FNN)
 
 
 
-
-fix_rank <- function(dat, col){
-  for(ct in unique(dat$ct)){
-    dat[dat$ct==ct,col] <- rank(dat[dat$ct==ct,col])
-  }
-  dat
-}
+# 
+# fix_rank <- function(dat, col){
+#   for(ct in unique(dat$ct)){
+#     dat[dat$ct==ct,col] <- rank(dat[dat$ct==ct,col])
+#   }
+#   dat
+# }
 
 rank_by_ct <- function(dat, col){
   for(ct in unique(dat$ct)){
@@ -661,6 +661,104 @@ write.csv(
 
 
 
+
+#############################################################
+##############  Feature for gene family index    ############
+#############################################################
+
+
+### Get merge first the celltype pmid and the g2phm_genespresent
+pmid_term <- read.csv("features/keywords_pmids.csv",stringsAsFactors = FALSE)[,-1]
+colnames(pmid_term) <- c("ct","pmid")
+genes_ct_pmid <- merge(pmid_term, g2phm_genespresent)
+
+### Get the ranked PMIDs for each cell type
+feature_pmidcount <- read.csv("features/feature_ranked_pmid.csv", stringsAsFactors=FALSE)
+feature_pmidcount$rank_pmid <- rank_by_ct(feature_pmidcount, "pmid_count")
+feature_pmidcount <- within(feature_pmidcount, rm(pmid_count))
+
+### Split gene names
+uniques_g2phm_symbols<- unique(genes_ct_pmid$gene)
+genefam<- data.frame(
+  gene = uniques_g2phm_symbols,
+  letters=str_extract(uniques_g2phm_symbols, "[a-zA-Z]*"), #letters until first number
+  numbers=as.numeric(str_extract(uniques_g2phm_symbols, "[0-9]+")), #1st number
+  stringsAsFactors = FALSE
+)
+
+# Keep genes which match the structure Xyz123
+genefam <- genefam[genefam$gene==sprintf("%s%s", genefam$letters, genefam$numbers),]
+
+### Get the founder - the gene with the smallest number in each family
+genefam_founder <- merge(feature_pmidcount, genefam)
+genefam_min_index <- sqldf("select distinct ct, letters, min(`numbers`) as numbers from genefam_founder group by letters, ct")
+genefam_founder <- merge(genefam_founder, genefam_min_index)
+
+gene_with_founder <- merge(
+  merge(
+    genefam,
+    feature_pmidcount),
+  data.frame(
+    ct=genefam_founder$ct,
+    letters=genefam_founder$letters,
+    founder_rank_pmid=genefam_founder$rank_pmid,
+    founder_index=genefam_founder$numbers
+  )
+)
+gene_with_founder$number_diff <- gene_with_founder$numbers - gene_with_founder$founder_index
+
+### Do not keep genes which have some ridiculous numbers
+gene_with_founder <- gene_with_founder[gene_with_founder$numbers<2000,]
+
+### Construct the feature
+feature_founder_rank <- data.frame(
+  gene=gene_with_founder$gene,
+  ct=gene_with_founder$ct,
+  family_indexdiff=gene_with_founder$number_diff,
+  family_founder_rank=gene_with_founder$founder_rank_pmid
+)
+
+### Do not keep genes which are founders
+feature_founder_rank <- feature_founder_rank[feature_founder_rank$family_indexdiff!=0,]
+
+### Export feature
+nrow(feature_founder_rank)
+write.csv(feature_founder_rank, "features/feature_founder_fam_rankpmid.csv", row.names = F)
+
+
+#############################################################
+##############        First year feature          ###########
+#############################################################
+
+if(file.file.exists("features/feature_minyear_gene_ct.csv")){
+
+  feature_minyear_gene_ct <- read.csv("features/feature_minyear_gene_ct.csv", stringsAsFactors = FALSE)
+  
+} else {
+ 
+  ### Read when a paper was published and for which cell type
+  pmid_term <- read.csv("features/keywords_pmids.csv",stringsAsFactors = F)[,-1] 
+  colnames(pmid_term)<- c("ct", "pmid")
+  
+  pub_year <- read.csv("input/pubyear.csv", header=F, stringsAsFactors = F, sep="\t")[,1:2] 
+  colnames(pub_year)<- c("pmid", "year")
+  
+  ### Merge tables
+  pmids_present <- merge(g2phm_genespresent, pub_year)
+  pmids_present <- merge(pmids_present, pmid_term)
+
+  ### Figure out the first year for each gene and cell type
+  feature_minyear_gene_ct <- sqldf("select gene, ct, min(year) as first_year from pmids_present group by gene, ct")
+  
+  ### Export feature
+  write.csv(feature_minyear_gene_ct, "features/feature_minyear_gene_ct.csv", row.names = FALSE)
+
+}
+
+
+
+
+
 ###############################################################################################################
 ########## Merge the features for the final model #############################################################
 ###############################################################################################################
@@ -676,7 +774,9 @@ feature_coexp <- read.csv("features/feature_coexp.csv", stringsAsFactors=FALSE)
 feature_essentiality <- read.csv("features/feature_essentiality.csv", stringsAsFactors=FALSE)
 feature_chromloc <- read.csv("features/feature_chromatin.csv", stringsAsFactors=FALSE)
 feature_ppi <- read.csv("features/feature_ppi.csv", stringsAsFactors=FALSE)
-feature_genefam <- read.csv("features/founder_fam_rankpmid.csv", stringsAsFactors=FALSE)   ### Not yet generated here!   TODO
+#feature_genefam <- read.csv("features/founder_fam_rankpmid.csv", stringsAsFactors=FALSE)   ### Not yet generated here!   TODO
+feature_minyear_gene_ct <- read.csv("features/feature_minyear_gene_ct.csv", stringsAsFactors = FALSE)
+feature_founder_rank <- read.csv("features/feature_founder_fam_rankpmid.csv", stringsAsFactors = FALSE)
 
 
 ####### Merge all the features 
@@ -687,7 +787,8 @@ allfeat <- merge(allfeat, feature_coexp, all=TRUE)
 allfeat <- merge(allfeat, feature_essentiality, all=TRUE)
 allfeat <- merge(allfeat, feature_chromloc, all=TRUE)
 allfeat <- merge(allfeat, feature_ppi, all=TRUE)
-allfeat <- merge(allfeat, feature_genefam, all=TRUE)
+allfeat <- merge(allfeat, feature_minyear_gene_ct, all=TRUE)
+allfeat <- merge(allfeat, feature_founder_rank, all=TRUE)
 
 allfeat <- allfeat[!is.na(allfeat$rank_pmid),]    ########## a surprising number of missing rank PMIDs. how can this be?
 
