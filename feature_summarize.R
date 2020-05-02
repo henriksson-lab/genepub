@@ -11,23 +11,32 @@ library(Matrix)
 library(stringr)
 library(Rtsne)
 library(FNN)
-#require(Mcomp)
+library(RSQLite)
 
 
 
-# 
-# fix_rank <- function(dat, col){
-#   for(ct in unique(dat$ct)){
-#     dat[dat$ct==ct,col] <- rank(dat[dat$ct==ct,col])
-#   }
-#   dat
-# }
-
+#############################################################
+## Function: Rank a column within each cell type (column ct)
 rank_by_ct <- function(dat, col){
   for(ct in unique(dat$ct)){
     dat[dat$ct==ct,col] <- rank(dat[dat$ct==ct,col])
   }
   dat[,col]
+}
+
+
+#############################################################
+## Function: Store coordinates for the website
+store_website_coordinates <- function(name,coord) {
+
+  ## Integrate mouse ENSMUSG* IDs  
+  map_ensmus_sym <- read.csv("input/map_ensmus_symbol.csv", stringsAsFactors = FALSE)
+  colnames(map_ensmus_sym) <- c("ensmus","gene")
+
+  ##Write to file
+  con <- dbConnect(SQLite(), dbname = sprintf("website/data/coord_%s.sqlite", name))
+  dbWriteTable(con, "coord", merge(coord, map_ensmus_sym), overwrite=TRUE)
+  dbDisconnect(con)
 }
 
 
@@ -40,17 +49,14 @@ rank_by_ct <- function(dat, col){
 g2phm_genespresent<- read.csv(file = "input/g2phm_genespresent.csv",header = T, stringsAsFactors = FALSE)[,-1]
 colnames(g2phm_genespresent) <- c("mouseid","gene","pmid")
 
-############# Figure out what cell type each paper is about
-
 if(file.exists("features/keywords_pmids.csv")){
   
   ### Read map: keyword - PMID
   pmid_term <- read.csv("features/keywords_pmids.csv",stringsAsFactors = FALSE)[,-1]
   
-  
 } else {
 
-  #Get list of keywords. c("celltype","collapsed")
+  #Get list of keywords we use to search for papers about cell types: c("celltype","collapsed")
   keywords_master_dict <- read.csv("input/celltypes_tissue_to_collapse.csv",stringsAsFactors = F)[,3:4]
   keywords_list_for_query <- unique(keywords_master_dict$collapsed)
   
@@ -74,15 +80,6 @@ if(file.exists("features/keywords_pmids.csv")){
         pmid=tst2$ids, 
         stringsAsFactors = FALSE)
     )
-    
-    
-    ## Read map: year - month - pubmed ID
-    #pub_year<- read.csv("input/pubyear.csv", header=F, stringsAsFactors = F, sep="\t")[,1:2]    # in ml, download
-    #colnames(pub_year) <- c("pmid", "year")
-    
-    ## TODO - if we need - first year of year of each paper ... and in which cell type?
-    #genes_pmids <- merge(g2phm_genespresent, pub_year)
-    
     
   }
   
@@ -328,7 +325,8 @@ if(file.exists("features/feature_coexp.csv")) {
       custom.settings$random_state = 666
       umap.norm <- umap(pca.norm$x, config = custom.settings)
       
-      write.table(umap.norm$layout, file = sprintf("plots/data_umap_coexp_k%s_%s.csv", k, the_ct),col.names = FALSE, sep=",")
+      rownames(umap.norm$layout) <- rownames(red_count)
+      write.csv(umap.norm$layout, file = sprintf("plots/data_umap_coexp_k%s_%s.csv", k, the_ct))
       
       ## Extract neighbour graph
       gene_names <- rownames(red_count)
@@ -383,7 +381,26 @@ if(file.exists("features/feature_coexp.csv")) {
   nrow(feature_coexp)
 
   
+  
+  
+  ## Store umap coordinates for website
+  all_cell_types <- unique(feature_pmidcount$ct)
+  all_umap_coord <- NULL
+  for(celltype in all_cell_types){  #list.files("plots","data_umap_coexp_k10_*"
+    the_file <- sprintf("plots/data_umap_coexp_k10_%s.csv",celltype)
+    
+    dat <- read.csv(the_file, stringsAsFactors = FALSE)#,sep=",")[,-1]#, col.names = FALSE)  
+    colnames(dat) <- c("gene",sprintf("x_%s", celltype), sprintf("y_%s", celltype))
+    if(is.null(all_umap_coord)){
+      all_umap_coord <- dat
+    } else {
+      all_umap_coord <- merge(all_umap_coord, dat, all=TRUE)
+    }
+  }
+  store_website_coordinates("coexp", all_umap_coord)
+
 }
+
 
 
 
@@ -422,8 +439,20 @@ if(file.exists("features/feature_chromloc.csv")) {
   length(unique(feature_chromloc$gene))  #how can this be 53 000 ?????
   
   
-  
-  
+  ###########################################
+  ## Prepare coordinates for website
+  coord_chrom <- merge(
+    feature_chromloc,
+    data.frame(
+      chrom=c(1:19, "X","Y"),  #Only care about the "proper" chromosomes
+      y=1:21
+    ))
+  coord_chrom <- data.frame(
+    gene=coord_chrom$gene,
+    x=coord_chrom$pos,
+    y=coord_chrom$y)
+  store_website_coordinates("chrom",coord_chrom)
+
   ###########################################
   ## Calculate avg(#PMID) of the k nearest neigbours along the chromosome.
   ## Assumes only one cell type
@@ -804,6 +833,12 @@ write.csv(allfeat, "totfeature.csv", row.names = FALSE)
 
 ####### Write data for webserver
 
+feature_long_name <- read.csv("input/feature_long_name.csv")
+
+con <- dbConnect(SQLite(), dbname = "website/data/totfeature.sqlite")
+dbWriteTable(con, "feature_matrix", allfeat, overwrite=TRUE)
+dbWriteTable(con, "feature_desc", feature_long_name, overwrite=TRUE)
+dbDisconnect(con)
 
 
 

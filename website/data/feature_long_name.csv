@@ -1,0 +1,10 @@
+feature,feature_long_name
+rank_pmid,Rank #papers
+rank_exp,Rank RNA expression level
+coexp10,Co-expression
+perc_dependent_cells,Essentiality
+nearby_pmid,Chromatin nearby avg(rank #papers)
+ppi,PPI partner avg(rank #papers)
+first_year,First year published
+family_indexdiff,Gene family index difference
+family_founder_rank,Gene family founder rank #papers

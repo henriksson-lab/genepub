@@ -133,7 +133,6 @@ for(cell_type in all_cell_type) {
   num_basepoints <- 5
   design <- matrix(nrow=nrow(allfeat), ncol=0)
   coefs <- normal(0, 10, dim = 0)
-  #poly_bp <- list()
   all_poly <- list()
   for(i in 1:length(use_features)){
     the_feature <- use_features[i]
@@ -141,8 +140,7 @@ for(cell_type in all_cell_type) {
     pmat <- get_spline_mat(allfeat[,the_feature], num_basepoints = num_basepoints)
     design <- cbind(design, pmat$design)
     all_poly[[the_feature]] <- pmat
-    #poly_bp[[the_feature]] <- pmat$bx
-    
+
     #Collect coefficients
     coefsf <- normal(0, 10, dim = num_basepoints-1)
     coefs <- rbind(coefs, c(coefsf, -sum(coefsf)))
@@ -181,8 +179,6 @@ for(cell_type in all_cell_type) {
     thei <- (1+(i-1)*num_basepoints):(i*num_basepoints)
     all_poly[[the_feature]]$stat    <- pstat[thei,] 
     all_poly[[the_feature]]$statcol <- rownames(pstat)[thei]
-    #poly_stat[[use_features[i]]] <- pstat[thei,] 
-    #poly_columns[[use_features[i]]] <- rownames(pstat)[thei]
   }
   
   
@@ -191,7 +187,7 @@ for(cell_type in all_cell_type) {
   contribs <- matrix(nrow=nrow(allfeat), ncol=length(use_features))
   for(i in 1:length(use_features)) {
     the_feature <- use_features[i]
-    the_columns <- all_poly[[the_feature]]$statcol    #poly_columns[[the_feature]]
+    the_columns <- all_poly[[the_feature]]$statcol   
     contribs[,i] <- design[,the_columns] %*% s$statistics[the_columns,"Mean"]
   }
   
@@ -210,11 +206,7 @@ for(cell_type in all_cell_type) {
   )
   
   saveRDS(the_fit, file = sprintf("greta/out/%s",cell_type)) 
-  #the_fit <- readRDS(sprintf("greta/out/%s",cell_type))
-  
-  
-  
-  
+
    
 }
 
