@@ -1,4 +1,4 @@
-feature,feature_long_name
+feature_id,feature_long_name
 rank_pmid,Rank #papers
 rank_exp,Rank RNA expression level
 coexp10,Co-expression

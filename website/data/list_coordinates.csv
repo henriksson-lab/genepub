@@ -1,7 +1,7 @@
-coord_id,coord_name
-coexp,Co-expression network
-chrom,Chromatin proximity
-PPI,Protein-protein interaction network
-homology,Homology
-residual,Sorted by model fit residual
-allfeat,All feature-UMAP
+coord_id,coord_name,perct
+coexp,Co-expression network,true
+chrom,Chromatin proximity,false
+PPI,Protein-protein interaction network,false
+homology,Homology,false
+residual,Sorted by model fit residual,true
+allfeat,All feature-UMAP,false
