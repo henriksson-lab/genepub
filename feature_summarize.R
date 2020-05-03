@@ -12,32 +12,91 @@ library(stringr)
 library(Rtsne)
 library(FNN)
 library(RSQLite)
-
-
+library(igraph)
+library(reshape)
 
 #############################################################
 ## Function: Rank a column within each cell type (column ct)
 rank_by_ct <- function(dat, col){
   for(ct in unique(dat$ct)){
+    x <- dat[dat$ct==ct,col]
+
+    #fp <- fitdist(x, "pareto")
+    #px <- dinvpareto(x, shape = fp$estimate[1], scale = fp$estimate[2], log = FALSE)
+    #dat[dat$ct==ct,col] <- 
+    
     dat[dat$ct==ct,col] <- rank(dat[dat$ct==ct,col])
+
+    
   }
   dat[,col]
+}
+
+if(FALSE){
+  feature_pmidcount$rank_pmid <- rank_by_ct(feature_pmidcount, "pmid_count")
+  hist(feature_pmidcount$rank_pmid[feature_pmidcount$ct=="T cell"])
+  library(ParetoPosStable)
+
+  x <- feature_pmidcount$pmid_count[feature_pmidcount$ct=="T cell"]
+  hist((x^0.01)^0.01)
+  hist((exp(x))^0.001)
+  hist(rank(x, ties.method = "average")^4)
+  fit <- PPS.fit(x)
+  fit$estimate
+  hist(x^fit$estimate$nu)
+  plot(fit)
+  plot(rank(x, ties.method = "average")^2)
+
+  fp <- fitdist(x, "pareto")#, start=list(shape = 1, scale = 500))
+  hist(dinvpareto(x, shape = fp$estimate[1], scale = fp$estimate[2], log = FALSE),breaks=100)
+
 }
 
 
 #############################################################
 ## Function: Store coordinates for the website
 store_website_coordinates <- function(name,coord) {
-
+  
   ## Integrate mouse ENSMUSG* IDs  
   map_ensmus_sym <- read.csv("input/map_ensmus_symbol.csv", stringsAsFactors = FALSE)
   colnames(map_ensmus_sym) <- c("ensmus","gene")
-
+  
   ##Write to file
   con <- dbConnect(SQLite(), dbname = sprintf("website/data/coord_%s.sqlite", name))
   dbWriteTable(con, "coord", merge(coord, map_ensmus_sym), overwrite=TRUE)
   dbDisconnect(con)
 }
+
+
+###############################################
+## Function: Layout a graph (data frame), return coordinates
+graph_layout_to_df <- function(graph_df, ct=NULL) {
+  
+  ## Do the layout
+  igg <- graph_from_data_frame(graph_df, directed = FALSE, vertices = NULL)
+  #lay <- layout_with_dh(igg, )  # too slow?
+  #lay <- layout_with_kk(igg, )  # nice speed. not tested
+  lay <- layout_with_fr(igg, )
+  
+  ## Figure out column names
+  if(is.null(ct)){
+    xname <- "x"
+    yname <- "y"
+  } else {
+    xname <- sprintf("x_%s",ct)
+    yname <- sprintf("y_%s",ct)
+  }
+  
+  ## Construct data frame
+  df <- data.frame(
+    gene=vertex_attr(igg, "name")
+  )
+  df[,xname] <- lay[,1]
+  df[,yname] <- lay[,2]
+  
+  df
+}
+
 
 
 #############################################################
@@ -55,7 +114,7 @@ if(file.exists("features/keywords_pmids.csv")){
   pmid_term <- read.csv("features/keywords_pmids.csv",stringsAsFactors = FALSE)[,-1]
   
 } else {
-
+  
   #Get list of keywords we use to search for papers about cell types: c("celltype","collapsed")
   keywords_master_dict <- read.csv("input/celltypes_tissue_to_collapse.csv",stringsAsFactors = F)[,3:4]
   keywords_list_for_query <- unique(keywords_master_dict$collapsed)
@@ -100,17 +159,17 @@ if(file.exists("features/feature_ranked_pmid.csv")) {
   ### Calculate #paper / ct,gene
   ranked_pmid_ct_gene <- merge(pmid_term, g2phm_genespresent)
   feature_pmidcount <- sqldf("select gene, term as ct, count(pmid) as pmid_count from ranked_pmid_ct_gene group by gene, term")
+  feature_pmidcount$rank_pmid <- rank_by_ct(feature_pmidcount, "pmid_count")
   
   ### Store  
   write.csv(feature_pmidcount, "features/feature_ranked_pmid.csv", row.names = F)
-
+  
 }
 
 
 ############# Calculate rank #paper
 
-feature_pmidcount$rank_pmid <- rank_by_ct(feature_pmidcount, "pmid_count")
-feature_pmidcount <- within(feature_pmidcount, rm(pmid_count))
+#feature_pmidcount <- within(feature_pmidcount, rm(pmid_count))
 
 
 
@@ -196,12 +255,12 @@ write.csv(tissue_celltype_count_max, "features/tabula_tissue_mostabundant_ct.csv
 
 
 if(file.exists("features/feature_geneexp.csv")) {
-
+  
   ### Load from disk
   feature_exp <- read.csv("features/feature_geneexp.csv", stringsAsFactors=FALSE)
   
 } else {
-
+  
   ### For each cell type, find rank average expression level
   feature_exp <- NULL
   for (i in 1:nrow(tissue_celltype_count_max)){
@@ -228,7 +287,7 @@ if(file.exists("features/feature_geneexp.csv")) {
       feature_one_exp
     )
   }
-
+  
   ### Store feature, rank expression
   write.csv(
     feature_exp[,c("gene","ct","rank_exp")], 
@@ -379,7 +438,7 @@ if(file.exists("features/feature_coexp.csv")) {
     feature_coexp[,c("gene","ct","coexp10")],
     "features/feature_coexp.csv", row.names = FALSE)
   nrow(feature_coexp)
-
+  
   
   
   
@@ -398,7 +457,7 @@ if(file.exists("features/feature_coexp.csv")) {
     }
   }
   store_website_coordinates("coexp", all_umap_coord)
-
+  
 }
 
 
@@ -413,7 +472,7 @@ if(file.exists("features/feature_chromloc.csv")) {
   feature_chromloc <- read.csv("features/feature_chromloc.csv", stringsAsFactors = FALSE)
   
 } else {
-
+  
   
   
   ### Read chromosome locations of genes
@@ -452,7 +511,7 @@ if(file.exists("features/feature_chromloc.csv")) {
     x=coord_chrom$pos,
     y=coord_chrom$y)
   store_website_coordinates("chrom",coord_chrom)
-
+  
   ###########################################
   ## Calculate avg(#PMID) of the k nearest neigbours along the chromosome.
   ## Assumes only one cell type
@@ -493,7 +552,7 @@ if(file.exists("features/feature_chromloc.csv")) {
   
   #### Link location - #PMID
   dat <- merge(feature_chromloc, feature_pmidcount)
-
+  
   #### Calculate neighbour #PMID, for all cell types (need to do one ct at a time)
   datchrom_all <- NULL
   for(ct in unique(dat$ct)){
@@ -504,7 +563,7 @@ if(file.exists("features/feature_chromloc.csv")) {
       datchrom_all,
       neigh_for_ct)  
   }
-
+  
   
   #### Generate feature: Chromatin structure #PMID
   feature_chromloc <- datchrom_all[,c("gene","ct","nearby_pmid")]
@@ -514,7 +573,7 @@ if(file.exists("features/feature_chromloc.csv")) {
   write.csv(
     feature_chromloc, 
     "features/feature_chromloc.csv", row.names = FALSE)
-
+  
 }
 
 
@@ -530,7 +589,7 @@ if(file.exists("features/feature_chromloc.csv")) {
 
 
 if(FALSE){
-
+  
   dat <- merge(feature_chromloc, feature_pmidcount)
   dat <- merge(dat, feature_exp)
   length(unique(dat$gene))  #17000
@@ -556,7 +615,7 @@ if(FALSE){
   # fig <- plot_ly(data = datsub, x = ~pos, y = ~rank_pmid,
   #                text = ~paste(gene))
   # fig
-
+  
 }
 
 
@@ -569,7 +628,7 @@ if(file.exists("features/feature_homology_pmid.csv")) {
   feature_homology_pmid <- read.csv("features/feature_homology_pmid.csv", stringsAsFactors = FALSE)
   
 } else {
-
+  
   ## Full graph; don't do this
   #graph_homology <- read.table("homology_graph.csv", sep="\t")[,1:2]#, col.names = FALSE)#[,c("from","to")]
   #colnames(graph_homology) <- c("from","to")
@@ -584,6 +643,12 @@ if(file.exists("features/feature_homology_pmid.csv")) {
   write.csv(
     feature_homology_pmid, 
     "features/feature_homology_pmid.csv", row.names = FALSE)
+  
+  
+  ## Store graph for website use
+  store_website_coordinates("homology",graph_layout_to_df(graph_homology))
+  
+  
   
 }
 
@@ -638,6 +703,10 @@ write.csv(
   "features/feature_ppi.csv", row.names = FALSE)
 
 
+### Store HuRI layout for website
+store_website_coordinates("PPI",graph_layout_to_df(huri_symbol))
+
+
 ### Quick check of correlation
 if(FALSE){
   dat <- merge(feature_pmidcount, feature_ppi)
@@ -648,6 +717,94 @@ if(FALSE){
   
 }
 
+
+#############################################################
+########## Features from EBI GWAS ###########################
+#############################################################
+
+### Create a mapping human <-> mouse gene symbol
+map_ensg_sym <- read.csv("input/map_ensg_symbol.csv", stringsAsFactors = FALSE)
+map_human_mouse <- read.csv("input/human_mouse.txt", stringsAsFactors = F)
+colnames(map_human_mouse) <- c("ensmus","ensg")
+map_ensmus_sym <- read.csv("input/map_ensmus_symbol.csv", stringsAsFactors = FALSE)
+map_human_mouse_sym <- unique(merge(merge(map_ensmus_sym, map_human_mouse),map_ensg_sym)[,c("mouse_symbol","human_symbol")])
+
+
+## Read GWAS file
+dat_gwas <- read.csv("input/gwas/temp.csv",sep="\t", stringsAsFactors = FALSE)[1:500,]
+
+## Figure out which mouse genes are annotated on each row
+v <- str_split_fixed(dat_gwas$REPORTED.GENE.S.,pattern = ",", 10)
+rownames(v) <- sprintf("row_%s",1:nrow(dat_gwas))
+v <- melt(v)[,c(1,3)]
+colnames(v) <- c("row","human_symbol")
+map_row_sym <- unique(merge(v, map_human_mouse_sym)[,c("row","mouse_symbol")])
+
+## Associate metadata to gene
+dat_gwas_clean <- merge(
+  map_row_sym,
+  data.frame(
+    row=sprintf("row_%s",1:nrow(dat_gwas)),
+    pval=dat_gwas$P.VALUE,
+    intergenic=dat_gwas$INTERGENIC
+  )
+)
+
+## Ignore intergenic
+dat_gwas_clean <- dat_gwas_clean[dat_gwas_clean$intergenic==0,]
+
+## Aggregate p-values ... take smallest
+dat_gwas_agg <- sqldf("select distinct mouse_symbol as gene, min(pval) as gwas_pval from dat_gwas_clean group by gene")
+
+## How do we normalize? 
+#hist(qnorm(dat_gwas_agg$gwas_pval),breaks = 100) 
+#hist(rank(log10(dat_gwas_agg$gwas_pval)))
+
+## Generate and store feaure
+feature_gwas <- data.frame(
+  gene=dat_gwas_agg$gene,
+  rank_gwas=qnorm(dat_gwas_agg$gwas_pval)    #superior way. most important genes are negative
+#  rank_gwas=rank(log10(dat_gwas_agg$gwas_pval))
+)
+feature_gwas <- feature_gwas[!is.na(feature_gwas$rank_gwas),]
+
+write.csv(
+  feature_gwas, 
+  "features/feature_gwas.csv", row.names = FALSE)
+
+
+#############################################################
+########## Features from COSMIC #############################
+#############################################################
+
+## Load and create a mapping ENST* to mouse symbol
+map_ensg_transc <- read.csv("input/human_gene_transc.csv",sep="\t")[,1:2]
+colnames(map_ensg_transc) <- c("ensg","enst")
+map_human_mouse= read.csv("input/human_mouse.txt", stringsAsFactors = F)
+colnames(map_human_mouse) <- c("ensmus","ensg")
+map_ensmus_sym <- read.csv("input/map_ensmus_symbol.csv", stringsAsFactors = FALSE)
+map_enst_mousesym <- unique(merge(map_ensg_transc,merge(map_ensmus_sym, map_human_mouse))[,c("enst","mouse_symbol")])
+
+## Load COSMIC mutation count and map to mouse gene symbols
+dat_cosmic <- read.csv("input/cosmic/genecount.csv", stringsAsFactors = FALSE)
+colnames(dat_cosmic) <- c("enst","count","length")
+dat_cosmic <- merge(dat_cosmic, map_enst_mousesym)
+
+length(unique(dat_cosmic$mouse_symbol))
+
+hist(log10(1+dat_cosmic$count/dat_cosmic$length))
+
+feature_cosmic <- data.frame(
+  gene=dat_cosmic$mouse_symbol,
+#  rank_cosmic=log10(1+dat_cosmic$count/dat_cosmic$length)
+  rank_cosmic=rank(dat_cosmic$count/dat_cosmic$length)   #better than log10
+)
+#hist(rank(dat_cosmic$count))
+#hist(dat_cosmic$count)
+
+write.csv(
+  feature_cosmic, 
+  "features/feature_cosmic.csv", row.names = FALSE)
 
 
 #############################################################
@@ -703,8 +860,6 @@ genes_ct_pmid <- merge(pmid_term, g2phm_genespresent)
 
 ### Get the ranked PMIDs for each cell type
 feature_pmidcount <- read.csv("features/feature_ranked_pmid.csv", stringsAsFactors=FALSE)
-feature_pmidcount$rank_pmid <- rank_by_ct(feature_pmidcount, "pmid_count")
-feature_pmidcount <- within(feature_pmidcount, rm(pmid_count))
 
 ### Split gene names
 uniques_g2phm_symbols<- unique(genes_ct_pmid$gene)
@@ -760,11 +915,11 @@ write.csv(feature_founder_rank, "features/feature_founder_fam_rankpmid.csv", row
 #############################################################
 
 if(file.file.exists("features/feature_minyear_gene_ct.csv")){
-
+  
   feature_minyear_gene_ct <- read.csv("features/feature_minyear_gene_ct.csv", stringsAsFactors = FALSE)
   
 } else {
- 
+  
   ### Read when a paper was published and for which cell type
   pmid_term <- read.csv("features/keywords_pmids.csv",stringsAsFactors = F)[,-1] 
   colnames(pmid_term)<- c("ct", "pmid")
@@ -775,13 +930,13 @@ if(file.file.exists("features/feature_minyear_gene_ct.csv")){
   ### Merge tables
   pmids_present <- merge(g2phm_genespresent, pub_year)
   pmids_present <- merge(pmids_present, pmid_term)
-
+  
   ### Figure out the first year for each gene and cell type
   feature_minyear_gene_ct <- sqldf("select gene, ct, min(year) as first_year from pmids_present group by gene, ct")
   
   ### Export feature
   write.csv(feature_minyear_gene_ct, "features/feature_minyear_gene_ct.csv", row.names = FALSE)
-
+  
 }
 
 
@@ -795,7 +950,6 @@ if(file.file.exists("features/feature_minyear_gene_ct.csv")){
 ####### Load all the features 
 
 feature_pmidcount <- read.csv("features/feature_ranked_pmid.csv", stringsAsFactors=FALSE)
-feature_pmidcount$rank_pmid <- rank_by_ct(feature_pmidcount, "pmid_count")
 feature_pmidcount <- within(feature_pmidcount, rm(pmid_count))
 
 feature_exp <- read.csv("features/feature_geneexp.csv", stringsAsFactors=FALSE)
@@ -803,9 +957,11 @@ feature_coexp <- read.csv("features/feature_coexp.csv", stringsAsFactors=FALSE)
 feature_essentiality <- read.csv("features/feature_essentiality.csv", stringsAsFactors=FALSE)
 feature_chromloc <- read.csv("features/feature_chromatin.csv", stringsAsFactors=FALSE)
 feature_ppi <- read.csv("features/feature_ppi.csv", stringsAsFactors=FALSE)
-#feature_genefam <- read.csv("features/founder_fam_rankpmid.csv", stringsAsFactors=FALSE)   ### Not yet generated here!   TODO
 feature_minyear_gene_ct <- read.csv("features/feature_minyear_gene_ct.csv", stringsAsFactors = FALSE)
 feature_founder_rank <- read.csv("features/feature_founder_fam_rankpmid.csv", stringsAsFactors = FALSE)
+feature_cosmic <- read.csv("features/feature_cosmic.csv", stringsAsFactors = FALSE)
+feature_gwas <- read.csv("features/feature_gwas.csv", stringsAsFactors = FALSE)
+
 
 
 ####### Merge all the features 
@@ -818,13 +974,14 @@ allfeat <- merge(allfeat, feature_chromloc, all=TRUE)
 allfeat <- merge(allfeat, feature_ppi, all=TRUE)
 allfeat <- merge(allfeat, feature_minyear_gene_ct, all=TRUE)
 allfeat <- merge(allfeat, feature_founder_rank, all=TRUE)
+allfeat <- merge(allfeat, feature_cosmic, all=TRUE)
+allfeat <- merge(allfeat, feature_gwas, all=TRUE)
 
 allfeat <- allfeat[!is.na(allfeat$rank_pmid),]    ########## a surprising number of missing rank PMIDs. how can this be?
 
 ####### QC
 
 colnames(allfeat)
-print(length(unique(dat$gene)))
 print(nrow(allfeat))
 
 ####### Write data for classification
@@ -833,29 +990,9 @@ write.csv(allfeat, "totfeature.csv", row.names = FALSE)
 
 ####### Write data for webserver
 
-feature_long_name <- read.csv("input/feature_long_name.csv")
-
 con <- dbConnect(SQLite(), dbname = "website/data/totfeature.sqlite")
 dbWriteTable(con, "feature_matrix", allfeat, overwrite=TRUE)
+feature_long_name <- read.csv("website/data/feature_long_name.csv")
 dbWriteTable(con, "feature_desc", feature_long_name, overwrite=TRUE)
 dbDisconnect(con)
 
-
-
-############################## For debugging
-# allfeat <- feature_pmidcount
-# nrow(allfeat)
-# allfeat <- merge(allfeat, feature_exp, all=FALSE)
-# nrow(allfeat)
-# allfeat <- merge(allfeat, feature_coexp, all=FALSE)
-# nrow(allfeat)
-# allfeat <- merge(allfeat, feature_essentiality, all=FALSE)
-# nrow(allfeat)
-# allfeat <- merge(allfeat, feature_chromloc, all=FALSE)
-# nrow(allfeat)
-# allfeat <- merge(allfeat, feature_ppi, all=FALSE)
-# nrow(allfeat)
-# allfeat <- merge(allfeat, feature_genefam, all=FALSE)
-# nrow(allfeat)
-# 
-# 

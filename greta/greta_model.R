@@ -5,16 +5,6 @@ library(splines)
 cell_type <- "T cell"
 
 
-###############################################
-## Function to calculate RMSE
-calc_rmse <- function(residuals){
-  RSS <- c(crossprod(residuals))
-  MSE <- RSS / length(residuals)
-  RMSE <- sqrt(MSE)
-  RMSE
-}
-
-
 
 ###############################################
 ## Replace NA in each column with a neutral value
@@ -52,8 +42,9 @@ for(cell_type in all_cell_type) {
   allfeat <- replace_feat_na(allfeat)
   
   ###### Special treatment for the family index column: Cap it
-  allfeat$family_index[allfeat$family_index>10] <- 10
-
+  #allfeat$family_index[allfeat$family_index>10] <- 10
+  allfeat$family_indexdiff[allfeat$family_indexdiff>10] <- 10
+  
   ###### Rescale the data to make values more comparable
   allfeat <- as.data.frame(scale(allfeat))
 

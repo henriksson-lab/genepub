@@ -30,3 +30,7 @@ uploadfeature:
 
 uploadwebsite:
 	scp website/data/*sqlite beagle.henlab.org:/data/henlab/project/bias/new/website/data/
+
+getgreta:
+	scp -r beagle.henlab.org:/data/henlab/project/bias/new/greta/feature greta/
+	scp -r beagle.henlab.org:/data/henlab/project/bias/new/greta/out greta/
