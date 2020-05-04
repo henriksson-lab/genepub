@@ -844,7 +844,25 @@ feature_essentiality <- data.frame(
 ### Store feature, gene essentiality
 write.csv(
   feature_essentiality,   #note - no cell type
-  "features/feature_essentiality.csv", row.names = FALSE)
+  "features/feature_essentiality_global.csv", row.names = FALSE)
+
+
+### Adding collapsed cell type terminology as proxy for cancer celltype and keeping feature as feature_crispr_ct_dependency
+unique_celltype_mapping<- read.csv("input/unique_celltypes.csv", stringsAsFactors = F)
+crispr_data_working_unique_celltype<- data.frame(crispr_data_working[,-c(1,2,3,17)])
+crispr_data_working_unique_celltype=melt(crispr_data_working_unique_celltype, id= "mouse_symbol")
+colnames(crispr_data_working_unique_celltype)=c("gene","cancer_tissue", "essentiality_ct")
+
+feature_essentiality_ct= merge(crispr_data_working_unique_celltype, unique_celltype_mapping, by= "cancer_tissue")[,c(2,3,4)]
+
+### Store feature, gene essentiality for ct
+write.csv(
+  feature_essentiality_ct, #note - with cell type
+  "features/feature_essentiality_ct.csv"
+)
+
+
+
 
 
 
@@ -980,7 +998,8 @@ feature_pmidcount <- within(feature_pmidcount, rm(pmid_count))
 
 feature_exp <- read.csv("features/feature_geneexp.csv", stringsAsFactors=FALSE)
 feature_coexp <- read.csv("features/feature_coexp.csv", stringsAsFactors=FALSE)
-feature_essentiality <- read.csv("features/feature_essentiality.csv", stringsAsFactors=FALSE)
+feature_essentiality <- read.csv("features/feature_essentiality_global.csv", stringsAsFactors=FALSE)
+feature_essentiality_ct<- read.csv("feature/feature_essentiality_ct.csv", stringsAsFactors = FALSE)
 feature_chromloc <- read.csv("features/feature_chromatin.csv", stringsAsFactors=FALSE)
 feature_ppi <- read.csv("features/feature_ppi.csv", stringsAsFactors=FALSE)
 feature_minyear_gene_ct <- read.csv("features/feature_minyear_gene_ct.csv", stringsAsFactors = FALSE)
@@ -997,6 +1016,7 @@ totfeature <- feature_pmidcount
 totfeature <- merge(totfeature, feature_exp, all=TRUE)
 totfeature <- merge(totfeature, feature_coexp, all=TRUE)
 totfeature <- merge(totfeature, feature_essentiality, all=TRUE)
+totfeature <- merge(totfeature, feature_essentiality_ct, all=TRUE)
 totfeature <- merge(totfeature, feature_chromloc, all=TRUE)
 totfeature <- merge(totfeature, feature_ppi, all=TRUE)
 totfeature <- merge(totfeature, feature_minyear_gene_ct, all=TRUE)

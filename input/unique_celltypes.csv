@@ -1,0 +1,90 @@
+ct,cancer_tissue
+fibroblast,Bone
+fibroblast,Breast
+fibroblast,Central.Nervous.System
+fibroblast,Endometrium
+fibroblast,Esophagus
+fibroblast,Head.and.Neck
+fibroblast,Lung
+fibroblast,Ovary
+fibroblast,Pancreas
+fibroblast,Peripheral.Nervous.System
+fibroblast,Stomach
+fibroblast,Large.Intestine
+erythrocyte,Haematopoietic.and..Lymphoid
+professional antigen presenting cell,Haematopoietic.and..Lymphoid
+glial cell,Central.Nervous.System
+macrophage,Bone
+macrophage,Breast
+macrophage,Central.Nervous.System
+macrophage,Endometrium
+macrophage,Esophagus
+macrophage,Haematopoietic.and..Lymphoid
+macrophage,Head.and.Neck
+macrophage,Large.Intestine
+macrophage,Lung
+macrophage,Ovary
+macrophage,Pancreas
+macrophage,Peripheral.Nervous.System
+macrophage,Stomach
+oligodendrocyte,Central.Nervous.System
+neuron,Central.Nervous.System
+astrocyte,Central.Nervous.System
+pericyte,Central.Nervous.System
+stem cell,Bone
+stem cell,Breast
+stem cell,Central.Nervous.System
+stem cell,Endometrium
+stem cell,Esophagus
+stem cell,Haematopoietic.and..Lymphoid
+stem cell,Head.and.Neck
+stem cell,Large.Intestine
+stem cell,Lung
+stem cell,Ovary
+stem cell,Pancreas
+stem cell,Peripheral.Nervous.System
+stem cell,Stomach
+lymphocyte,Haematopoietic.and..Lymphoid
+myeloid cell,Haematopoietic.and..Lymphoid
+T cell,Haematopoietic.and..Lymphoid
+B cell,Haematopoietic.and..Lymphoid
+leukocyte,Haematopoietic.and..Lymphoid
+muscle cell,Endometrium
+muscle cell,Head.and.Neck
+large intestine cell,Large.Intestine
+enteroendocrine cell,Large.Intestine
+stromal cell,Bone
+stromal cell,Breast
+stromal cell,Central.Nervous.System
+stromal cell,Endometrium
+stromal cell,Esophagus
+stromal cell,Haematopoietic.and..Lymphoid
+stromal cell,Head.and.Neck
+stromal cell,Large.Intestine
+stromal cell,Lung
+stromal cell,Ovary
+stromal cell,Pancreas
+stromal cell,Peripheral.Nervous.System
+stromal cell,Stomach
+lung epithelial cell,Lung
+monocyte,Haematopoietic.and..Lymphoid
+ciliated cell,Head.and.Neck
+luminal epithelial cell of mammary gland,Breast
+granulocyte,Haematopoietic.and..Lymphoid
+basophil,Haematopoietic.and..Lymphoid
+hematopoietic precursor cell,Bone
+common lymphoid progenitor,Haematopoietic.and..Lymphoid
+common myeloid progenitor,Haematopoietic.and..Lymphoid
+pancreatic acinar cell,Pancreas
+type B pancreatic cell,Pancreas
+pancreatic A cell,Pancreas
+pancreatic ductal cell,Pancreas
+pancreatic D cell,Pancreas
+pancreatic PP cell,Pancreas
+epithelial cell,Breast
+epithelial cell,Endometrium
+epithelial cell,Esophagus
+epithelial cell,Head.and.Neck
+epithelial cell,Lung
+epithelial cell,Ovary
+blood cell,Haematopoietic.and..Lymphoid
