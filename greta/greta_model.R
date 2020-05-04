@@ -7,20 +7,8 @@ cell_type <- "T cell"
 
 
 ###############################################
-## Replace NA in each column with a neutral value
-replace_feat_na <- function(allfeat){
-  for(i in 1:ncol(allfeat)){
-    nalines <- is.na(allfeat[,i])
-    allfeat[nalines,i] <- median(allfeat[!nalines,i])
-  }
-  allfeat
-}
-
-
-
-###############################################
 ## Read all data
-totfeature <- read.csv("totfeature.csv", stringsAsFactors = FALSE)
+#totfeature <- read.csv("totfeature.csv", stringsAsFactors = FALSE)
 
 
 
@@ -30,30 +18,9 @@ all_cell_type <- unique(totfeature$ct)
 for(cell_type in all_cell_type) {
  #cell_type <- "T cell"
  
-  
-  ###### Choose one cell type to work with
-  allfeat <- totfeature[totfeature$ct==cell_type,]
-  allfeat_meta <- allfeat[,c("gene","ct")]
-  allfeat <- allfeat[,!(colnames(allfeat) %in% c("gene","ct"))]
-  #colMeans(is.na(allfeat_red))  #low is good
-  
-  
-  ###### Fill in NAs for now
-  allfeat <- replace_feat_na(allfeat)
-  
-  ###### Special treatment for the family index column: Cap it
-  #allfeat$family_index[allfeat$family_index>10] <- 10
-  allfeat$family_indexdiff[allfeat$family_indexdiff>10] <- 10
-  
-  ###### Rescale the data to make values more comparable
-  allfeat <- as.data.frame(scale(allfeat))
-
-  ###### Write similar object for python ML
-  write.csv(allfeat, sprintf("greta/feature/%s.csv",cell_type))
-  
-  
-  
-  #allfeat <- read.csv("for_gabija.csv", stringsAsFactors = FALSE)
+  allfeat <- read.csv(sprintf("greta/feature/%s.csv",cell_type))
+  allfeat_meta <- allfeat[,c("gene","ct","orig_year")]
+  allfeat <- allfeat[,!(colnames(allfeat_red) %in% c("gene","ct","orig_year"))]
   
   
   ###################################################################

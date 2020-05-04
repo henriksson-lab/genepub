@@ -429,7 +429,8 @@ if(file.exists("features/feature_coexp.csv")) {
   
   ### Store feature, Co-expression neighbour #PMID
   feature_coexp <- NULL
-  for(f in list.files("features","feature_coexp_part/feature_coexp_*")){
+  for(f in list.files("features/feature_coexp_part","feature_coexp_*")){
+    print(f)
     feature_coexp <- rbind(
       feature_coexp,
       read.csv(sprintf("features/feature_coexp_part/%s",f)))
@@ -443,9 +444,9 @@ if(file.exists("features/feature_coexp.csv")) {
   
   
   ## Store umap coordinates for website
-  all_cell_types <- unique(feature_pmidcount$ct)
+  all_cell_typess <- unique(feature_pmidcount$ct)
   all_umap_coord <- NULL
-  for(celltype in all_cell_types){  #list.files("plots","data_umap_coexp_k10_*"
+  for(celltype in all_cell_typess){  #list.files("plots","data_umap_coexp_k10_*"
     the_file <- sprintf("plots/data_umap_coexp_k10_%s.csv",celltype)
     
     dat <- read.csv(the_file, stringsAsFactors = FALSE)#,sep=",")[,-1]#, col.names = FALSE)  
@@ -701,7 +702,7 @@ feature_ppi <- feature_ppi[,c("gene","ct","ppi")]
 write.csv(
   feature_ppi, 
   "features/feature_ppi.csv", row.names = FALSE)
-
+length(unique(feature_ppi$gene))   ## only 6700
 
 ### Store HuRI layout for website
 store_website_coordinates("PPI",graph_layout_to_df(huri_symbol))
@@ -947,6 +948,31 @@ if(file.file.exists("features/feature_minyear_gene_ct.csv")){
 ########## Merge the features for the final model #############################################################
 ###############################################################################################################
 
+
+
+
+
+###############################################
+## Replace NA in each column with a neutral value
+replace_feat_na <- function(allfeat, replace.func=median){
+  for(i in 1:ncol(allfeat)){
+    nalines <- is.na(allfeat[,i])
+    allfeat[nalines,i] <- replace.func(allfeat[!nalines,i])#,na.rm = TRUE)
+  }
+  allfeat
+}
+
+
+###############################################
+## Replace NA in one column with a neutral value
+replace_feat_na_one <- function(allfeat, colname, replace.func=median){
+  nalines <- is.na(allfeat[,colname])
+  allfeat[nalines,colname] <- replace.func(allfeat[!nalines,colname])
+  allfeat
+}
+
+
+
 ####### Load all the features 
 
 feature_pmidcount <- read.csv("features/feature_ranked_pmid.csv", stringsAsFactors=FALSE)
@@ -961,38 +987,99 @@ feature_minyear_gene_ct <- read.csv("features/feature_minyear_gene_ct.csv", stri
 feature_founder_rank <- read.csv("features/feature_founder_fam_rankpmid.csv", stringsAsFactors = FALSE)
 feature_cosmic <- read.csv("features/feature_cosmic.csv", stringsAsFactors = FALSE)
 feature_gwas <- read.csv("features/feature_gwas.csv", stringsAsFactors = FALSE)
+feature_homology <- read.csv("features/feature_homology_pmid.csv", stringsAsFactors = FALSE)
 
 
 
 ####### Merge all the features 
 
-allfeat <- feature_pmidcount
-allfeat <- merge(allfeat, feature_exp, all=TRUE)
-allfeat <- merge(allfeat, feature_coexp, all=TRUE)
-allfeat <- merge(allfeat, feature_essentiality, all=TRUE)
-allfeat <- merge(allfeat, feature_chromloc, all=TRUE)
-allfeat <- merge(allfeat, feature_ppi, all=TRUE)
-allfeat <- merge(allfeat, feature_minyear_gene_ct, all=TRUE)
-allfeat <- merge(allfeat, feature_founder_rank, all=TRUE)
-allfeat <- merge(allfeat, feature_cosmic, all=TRUE)
-allfeat <- merge(allfeat, feature_gwas, all=TRUE)
+totfeature <- feature_pmidcount
+totfeature <- merge(totfeature, feature_exp, all=TRUE)
+totfeature <- merge(totfeature, feature_coexp, all=TRUE)
+totfeature <- merge(totfeature, feature_essentiality, all=TRUE)
+totfeature <- merge(totfeature, feature_chromloc, all=TRUE)
+totfeature <- merge(totfeature, feature_ppi, all=TRUE)
+totfeature <- merge(totfeature, feature_minyear_gene_ct, all=TRUE)
+totfeature <- merge(totfeature, feature_founder_rank, all=TRUE)
+totfeature <- merge(totfeature, feature_cosmic, all=TRUE)
+totfeature <- merge(totfeature, feature_gwas, all=TRUE)
+totfeature <- merge(totfeature, feature_homology, all=TRUE)
 
-allfeat <- allfeat[!is.na(allfeat$rank_pmid),]    ########## a surprising number of missing rank PMIDs. how can this be?
+
+######## Deal with #PMID. 
+#In many cases there are on papers about a gene, so need to set to lowest rank
+#possible better is to set to 0 before ranking, for comparability
+mean(is.na(totfeature$rank_pmid))
+totfeature <- replace_feat_na_one(totfeature, "rank_pmid", min)
+#older way - nasty! skews the first_year coefficient badly over time
+#totfeature <- totfeature[!is.na(totfeature$rank_pmid),]   
+
 
 ####### QC
 
-colnames(allfeat)
-print(nrow(allfeat))
+colnames(totfeature)
+print(nrow(totfeature))
+
+#hist(na.omit(totfeature$ppi))
 
 ####### Write data for classification
 
-write.csv(allfeat, "totfeature.csv", row.names = FALSE)
+write.csv(totfeature, "totfeature.csv", row.names = FALSE)
 
 ####### Write data for webserver
 
 con <- dbConnect(SQLite(), dbname = "website/data/totfeature.sqlite")
-dbWriteTable(con, "feature_matrix", allfeat, overwrite=TRUE)
+dbWriteTable(con, "feature_matrix", totfeature, overwrite=TRUE)
 feature_long_name <- read.csv("website/data/feature_long_name.csv")
 dbWriteTable(con, "feature_desc", feature_long_name, overwrite=TRUE)
 dbDisconnect(con)
 
+
+
+###############################################
+## Prepare separate dataset for each cell type, do imputation
+#totfeature <- read.csv("totfeature.csv", stringsAsFactors = FALSE)
+all_cell_types <- unique(totfeature$ct)
+for(cell_type in all_cell_types) {
+  #cell_type <- "T cell"
+  #cell_type <- "pancreatic D cell"
+  print(cell_type)
+  
+  ###### Choose one cell type to work with
+  allfeat <- totfeature[totfeature$ct==cell_type,]
+  allfeat_meta <- allfeat[,c("gene","ct")]
+  allfeat <- allfeat[,!(colnames(allfeat) %in% c("gene","ct"))]
+  #colMeans(is.na(allfeat_red))  #low is good
+  nrow(allfeat)
+  
+  ###### Only consider cells with enough genes
+  if(nrow(allfeat)>3000){
+    
+    ###### Fill in NAs for now
+    allfeat <- replace_feat_na(allfeat)
+    
+    ###### Special treatment for the family index column: Cap it
+    #allfeat$family_index[allfeat$family_index>10] <- 10
+    allfeat$family_indexdiff[allfeat$family_indexdiff>10] <- 10
+    
+    ###### Special treatment for expression level: set to 0? no need
+    #allfeat$family_indexdiff[allfeat$family_indexdiff>10] <- 10
+    #sum(is.na(allfeat$rank_exp))
+    #min(allfeat$rank_exp)
+    
+    ### Rescale; keep the year before scaling
+    orig_year <- allfeat$first_year
+    allfeat_scaled <- as.data.frame(scale(allfeat))
+    
+    
+    ###### Write similar object for python ML
+    write.csv(
+      data.frame(
+        allfeat_meta, 
+        orig_year=orig_year, 
+        allfeat_scaled),
+      sprintf("greta/feature/%s.csv",cell_type), row.names = FALSE)    
+  } else {
+    print("   too few cells")
+  }
+}
