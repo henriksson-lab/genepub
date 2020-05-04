@@ -28,6 +28,10 @@ uploadfeature:
 	scp totfeature.csv beagle.henlab.org:/data/henlab/project/bias/new/
 	scp features/* beagle.henlab.org:/data/henlab/project/bias/new/features/
 
+downloadfeature:
+	scp beagle.henlab.org:/data/henlab/project/bias/new/features/* feature/
+
+
 uploadwebsite:
 	scp website/data/*sqlite beagle.henlab.org:/data/henlab/project/bias/new/website/data/
 
