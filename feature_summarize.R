@@ -159,6 +159,16 @@ if(file.exists("features/feature_ranked_pmid.csv")) {
   ### Calculate #paper / ct,gene
   ranked_pmid_ct_gene <- merge(pmid_term, g2phm_genespresent)
   feature_pmidcount <- sqldf("select gene, term as ct, count(pmid) as pmid_count from ranked_pmid_ct_gene group by gene, term")
+  
+  ### Not a full matrix - some papers missed. Fill in with 0s
+  if(FALSE){
+    tab <- cast(feature_pmidcount,gene~ct, fill = 0, value = "pmid_count")
+    feature_pmidcount <- melt(tab)
+    colnames(feature_pmidcount) <- c("gene","pmid_count","ct")
+    rownames(feature_pmidcount) <- NULL
+  }
+  
+  ### Do the ranking
   feature_pmidcount$rank_pmid <- rank_by_ct(feature_pmidcount, "pmid_count")
   
   ### Store  
@@ -462,8 +472,6 @@ if(file.exists("features/feature_coexp.csv")) {
 }
 
 
-
-
 #############################################################
 ############## Features from chromatin structure ############
 #############################################################
@@ -479,8 +487,9 @@ if(file.exists("features/feature_chromloc.csv")) {
   ### Read chromosome locations of genes
   gtf <- read.table("input/Mus_musculus.GRCm38.97.gtf",sep="\t", stringsAsFactors=FALSE)
   gtf <- gtf[gtf$V3 =="gene",]
+  
   extract_genename <- function(s) {
-    gs <- str_extract(s,"gene_name [a-zA-Z0-9]+")
+    gs <- str_extract(s,"gene_name [a-zA-Z0-9\\-]+")
     if(is.na(gs)){
       return("")
     } else {
@@ -488,15 +497,47 @@ if(file.exists("features/feature_chromloc.csv")) {
     }
   }
   
-  ### Compute gene midpoints
+  extract_ensid <- function(s) {
+    gs <- str_extract(s,"gene_id [a-zA-Z0-9]+")
+    if(is.na(gs)){
+      return("")
+    } else {
+      return(str_sub(gs, 9))
+    }
+  }
+  
+  
+  extract_gene_version <- function(s) {
+    gs <- str_extract(s,"gene_version [a-zA-Z0-9]+")
+    if(is.na(gs)){
+      return("")
+    } else {
+      return(str_sub(gs, 14))
+    }
+  }
+  
+  
+  ## Only keep these "proper" chromosomes
+  consider_chrom <- c(1:19, "X","Y")
+  
+  ### Compute gene midpoints   -- mistake, bad name, reused later
   feature_chromloc <- data.frame(
     chrom=gtf$V1,
     pos  = (gtf$V4 + gtf$V5)/2,
     gene = unname(sapply(gtf$V9, extract_genename)),
+    ensid = unname(sapply(gtf$V9, extract_ensid)),
+    genever = as.double(unname(sapply(gtf$V9, extract_gene_version))),
     stringsAsFactors = FALSE
   )
+  
+  ### Filter out earlier gene versions
+  feature_chromloc <- merge(feature_chromloc,sqldf("select gene, max(genever) as genever from feature_chromloc group by gene"))
+  
+  ### Filter out weird gene symbols and chromosomes
+  feature_chromloc <- unique(feature_chromloc[feature_chromloc$gene %in% feature_pmidcount$gene & feature_chromloc$chrom %in% consider_chrom, ])
+  
+  #Crucial ordering for later
   feature_chromloc <- feature_chromloc[order(feature_chromloc$pos),]
-  length(unique(feature_chromloc$gene))  #how can this be 53 000 ?????
   
   
   ###########################################
@@ -504,8 +545,8 @@ if(file.exists("features/feature_chromloc.csv")) {
   coord_chrom <- merge(
     feature_chromloc,
     data.frame(
-      chrom=c(1:19, "X","Y"),  #Only care about the "proper" chromosomes
-      y=1:21
+      chrom=consider_chrom, 
+      y=1:length(consider_chrom)
     ))
   coord_chrom <- data.frame(
     gene=coord_chrom$gene,
@@ -569,6 +610,9 @@ if(file.exists("features/feature_chromloc.csv")) {
   #### Generate feature: Chromatin structure #PMID
   feature_chromloc <- datchrom_all[,c("gene","ct","nearby_pmid")]
   length(unique(feature_chromloc$gene))
+
+  nrow((feature_chromloc))
+  nrow(unique(feature_chromloc))
   
   #### Store feature
   write.csv(
@@ -729,10 +773,12 @@ map_human_mouse <- read.csv("input/human_mouse.txt", stringsAsFactors = F)
 colnames(map_human_mouse) <- c("ensmus","ensg")
 map_ensmus_sym <- read.csv("input/map_ensmus_symbol.csv", stringsAsFactors = FALSE)
 map_human_mouse_sym <- unique(merge(merge(map_ensmus_sym, map_human_mouse),map_ensg_sym)[,c("mouse_symbol","human_symbol")])
+map_human_mouse_sym <- map_human_mouse_sym[map_human_mouse_sym$mouse_symbol %in% feature_pmidcount$gene,]
 
 
 ## Read GWAS file
-dat_gwas <- read.csv("input/gwas/temp.csv",sep="\t", stringsAsFactors = FALSE)[1:500,]
+dat_gwas <- read.csv("input/gwas/gwas_catalog_v1.0-associations_e98_r2020-03-08.tsv",sep="\t", stringsAsFactors = FALSE, quote = "")
+#dat_gwas <- read.csv("input/gwas/temp.csv",sep="\t", stringsAsFactors = FALSE)[1:500,]
 
 ## Figure out which mouse genes are annotated on each row
 v <- str_split_fixed(dat_gwas$REPORTED.GENE.S.,pattern = ",", 10)
@@ -768,6 +814,7 @@ feature_gwas <- data.frame(
 #  rank_gwas=rank(log10(dat_gwas_agg$gwas_pval))
 )
 feature_gwas <- feature_gwas[!is.na(feature_gwas$rank_gwas),]
+feature_gwas$rank_gwas[is.infinite(feature_gwas$rank_gwas)] <- -40   ## fix, cannot go lower in probability
 
 write.csv(
   feature_gwas, 
@@ -785,20 +832,25 @@ map_human_mouse= read.csv("input/human_mouse.txt", stringsAsFactors = F)
 colnames(map_human_mouse) <- c("ensmus","ensg")
 map_ensmus_sym <- read.csv("input/map_ensmus_symbol.csv", stringsAsFactors = FALSE)
 map_enst_mousesym <- unique(merge(map_ensg_transc,merge(map_ensmus_sym, map_human_mouse))[,c("enst","mouse_symbol")])
+map_enst_mousesym <- map_enst_mousesym[map_enst_mousesym$mouse_symbol %in% feature_pmidcount$gene,]
+
 
 ## Load COSMIC mutation count and map to mouse gene symbols
 dat_cosmic <- read.csv("input/cosmic/genecount.csv", stringsAsFactors = FALSE)
 colnames(dat_cosmic) <- c("enst","count","length")
 dat_cosmic <- merge(dat_cosmic, map_enst_mousesym)
 
-length(unique(dat_cosmic$mouse_symbol))
+## Reduce to genes
+dat_cosmic_by_gene <- sqldf("select sum(count) as count, avg(length) as length, mouse_symbol from dat_cosmic group by mouse_symbol")
 
+length(unique(dat_cosmic$mouse_symbol))
 hist(log10(1+dat_cosmic$count/dat_cosmic$length))
+hist(log10(1+dat_cosmic_by_gene$count/dat_cosmic_by_gene$length))
 
 feature_cosmic <- data.frame(
-  gene=dat_cosmic$mouse_symbol,
-#  rank_cosmic=log10(1+dat_cosmic$count/dat_cosmic$length)
-  rank_cosmic=rank(dat_cosmic$count/dat_cosmic$length)   #better than log10
+  gene=dat_cosmic_by_gene$mouse_symbol,
+#  rank_cosmic=log10(1+dat_cosmic_by_gene$count/dat_cosmic_by_gene$length)
+  rank_cosmic=rank(dat_cosmic_by_gene$count/dat_cosmic_by_gene$length)   #better than log10
 )
 #hist(rank(dat_cosmic$count))
 #hist(dat_cosmic$count)
@@ -815,31 +867,29 @@ write.csv(
 
 #### Read CRISPR screen data
 crispr_data<- read.csv("input/crisprscreen.csv", header = T, stringsAsFactors = FALSE)[-1,]
-colnames(crispr_data)[1:3]<-c("HGNC.symbol","perc_dependent_cells" ,"ensg")
-crispr_data= crispr_data[!crispr_data$ensg=="",]
-crispr_data$perc_dependent_cells <- as.double(crispr_data$perc_dependent_cells)
+colnames(crispr_data)[1:3]<-c("HGNC.symbol","essentiality_global" ,"ensg")
+crispr_data <- crispr_data[!crispr_data$ensg=="",]
+crispr_data$essentiality_global <- as.double(crispr_data$essentiality_global)
 
 ### Create mapping ENSG* -> mouse symbol
 map_human_mouse= read.csv("input/human_mouse.txt", stringsAsFactors = F)
 colnames(map_human_mouse) <- c("ensmus","ensg")
 map_ensmus_sym <- read.csv("input/map_ensmus_symbol.csv", stringsAsFactors = FALSE)
 map_ensg_mousesym <- merge(map_ensmus_sym, map_human_mouse)
+map_ensg_mousesym <- map_ensg_mousesym[map_ensg_mousesym$mouse_symbol %in% feature_pmidcount$gene,]
 
 #### Map to mouse ENSMUSG* and then to mouse symbol
 crispr_data_working <- merge(
   crispr_data,
   map_ensg_mousesym)
 
-mouse_human_ensid <- read.csv("input/human_mouse.txt",stringsAsFactors = F)
+#mouse_human_ensid <- read.csv("input/human_mouse.txt",stringsAsFactors = F)
 
 #### Keep only first occurence of duplicates, by hgnc symbol (dplyr)
-crispr_data_working <- crispr_data_working %>% distinct(HGNC.symbol, .keep_all = T)
+#crispr_data_working <- crispr_data_working %>% distinct(HGNC.symbol, .keep_all = T)   #### why do we need this?
 
 #### Extract feature
-feature_essentiality <- data.frame(
-  gene = crispr_data_working$mouse_symbol,
-  perc_dependent_cells=crispr_data_working$perc_dependent_cells
-)
+feature_essentiality <- sqldf("select mouse_symbol as gene, avg(essentiality_global) as essentiality_global from crispr_data_working group by gene")
 
 ### Store feature, gene essentiality
 write.csv(
@@ -848,17 +898,20 @@ write.csv(
 
 
 ### Adding collapsed cell type terminology as proxy for cancer celltype and keeping feature as feature_crispr_ct_dependency
-unique_celltype_mapping<- read.csv("input/unique_celltypes.csv", stringsAsFactors = F)
-crispr_data_working_unique_celltype<- data.frame(crispr_data_working[,-c(1,2,3,17)])
-crispr_data_working_unique_celltype=melt(crispr_data_working_unique_celltype, id= "mouse_symbol")
-colnames(crispr_data_working_unique_celltype)=c("gene","cancer_tissue", "essentiality_ct")
+unique_celltype_mapping <- read.csv("input/unique_celltypes.csv", stringsAsFactors = F)
+crispr_data_working_unique_celltype <- crispr_data_working[,-c(1,2,3,17)]
+crispr_data_working_unique_celltype <- melt(crispr_data_working_unique_celltype, id= "mouse_symbol")
+colnames(crispr_data_working_unique_celltype) <- c("gene","cancer_tissue", "essentiality_ct")
 
-feature_essentiality_ct= merge(crispr_data_working_unique_celltype, unique_celltype_mapping, by= "cancer_tissue")[,c(2,3,4)]
+feature_essentiality_ct <- unique(merge(crispr_data_working_unique_celltype, unique_celltype_mapping, by= "cancer_tissue")[,c(2,3,4)])
+feature_essentiality_ct$essentiality_ct <- as.double(feature_essentiality_ct$essentiality_ct)
+
+feature_essentiality_ct <- sqldf("select gene, max(essentiality_ct) as essentiality_ct, ct from feature_essentiality_ct group by gene,ct")
 
 ### Store feature, gene essentiality for ct
 write.csv(
-  feature_essentiality_ct, #note - with cell type
-  "features/feature_essentiality_ct.csv"
+  feature_essentiality_ct,
+  "features/feature_essentiality_ct.csv", row.names = FALSE
 )
 
 
@@ -1034,6 +1087,9 @@ totfeature <- replace_feat_na_one(totfeature, "rank_pmid", min)
 #older way - nasty! skews the first_year coefficient badly over time
 #totfeature <- totfeature[!is.na(totfeature$rank_pmid),]   
 
+sqldf("select ct, count(*) from totfeature group by ct")
+### Too many. some cell types explode!
+
 
 ####### QC
 
@@ -1089,17 +1145,59 @@ for(cell_type in all_cell_types) {
     
     ### Rescale; keep the year before scaling
     orig_year <- allfeat$first_year
-    allfeat_scaled <- as.data.frame(scale(allfeat))
+    #allfeat_scaled <- as.data.frame(scale(allfeat,center = FALSE, scale = TRUE))
+    allfeat_scaled <- as.data.frame(scale(allfeat))   #no longer center!
     
+    allfeat_final <-  data.frame(
+      allfeat_meta, 
+      orig_year=orig_year, 
+      allfeat_scaled)
     
     ###### Write similar object for python ML
     write.csv(
-      data.frame(
-        allfeat_meta, 
-        orig_year=orig_year, 
-        allfeat_scaled),
+      allfeat_final,
       sprintf("greta/feature/%s.csv",cell_type), row.names = FALSE)    
   } else {
     print("   too few cells")
   }
 }
+
+
+
+
+###############################################
+## Quality control of features
+
+isfine_feature <- function(dat){
+  length(unique(dat$gene))==length(dat$gene)  
+}
+isfine_feature(feature_essentiality)
+isfine_feature(feature_cosmic)
+isfine_feature(feature_gwas)
+
+isfine_feature_ct <- function(dat){
+  dat_u <- sqldf("select distinct gene, ct from dat")
+  nrow(dat_u)==nrow(dat)  
+}
+isfine_feature_ct(feature_pmidcount)
+isfine_feature_ct(feature_exp)
+isfine_feature_ct(feature_coexp)  #TODO
+isfine_feature_ct(feature_essentiality_ct)
+isfine_feature_ct(feature_chromloc) 
+isfine_feature_ct(feature_ppi)
+isfine_feature_ct(feature_minyear_gene_ct)
+isfine_feature_ct(feature_founder_rank)
+isfine_feature_ct(feature_homology)
+
+
+
+
+hist(totfeature$first_year)
+hist(feature_minyear_gene_ct$first_year)
+
+hist(totfeature$first_year[totfeature$ct=="T cell"])
+hist(totfeature$first_year[totfeature$ct=="astrocyte"])
+
+
+hist(allfeat_final$rank_pmid)
+

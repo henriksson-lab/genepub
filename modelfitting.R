@@ -10,6 +10,65 @@ lm_rmse <- function(res){
 }
 
 
+
+
+
+get_lm_weights <- function(thelm){
+  if(FALSE){
+    b <- thelm$coefficients[-1]
+    outv <- allfeat_red[,names(b)]
+    for(i in 1:ncol(outv)){
+      outv[,i] <- outv[,i]*b[i]/allfeat_red$rank_pmid       #dividing here makes this model rather unstable. low rank genes cause issues
+    }
+    cm <- colMeans(outv)
+    cm
+  } else {
+    b <- thelm$coefficients[-1]
+    outv <- allfeat_red[,names(b)]
+    for(i in 1:ncol(outv)){
+      outv[,i] <- outv[,i]*b[i]
+    }
+    cm <- colMeans(outv)
+    cm
+  }
+}
+
+
+
+get_lm_relweights <- function(thelm){
+  cm <- get_lm_weights(thelm)
+  #cm <- cm/sd(cm)
+  cm <- cm/-cm["first_year"]
+  cm <- cm[names(cm)!="first_year"]
+  #/-min(colMeans(outv))
+  cm
+}
+
+###############################################
+## Function: Model fitting
+fit_lm <- function(allfeat_red){
+  
+  allfeat_red$first_year2 <- allfeat_red$first_year**2
+  allfeat_red$first_year3 <- allfeat_red$first_year**3
+  allfeat_red$first_year4 <- allfeat_red$first_year**4
+  
+  thelm <- lm(
+    rank_pmid ~ rank_exp + coexp10 + essentiality_global + nearby_pmid + ppi + 
+      first_year + first_year2 + first_year3 + first_year4+
+      family_indexdiff + family_founder_rank + rank_cosmic + rank_gwas + homology_pmid, 
+    allfeat_red)
+  
+  #Should definitely not rescale - the scale should be representative. any shifts in points goes into the intercept
+  # thelm <- lm(
+  #   rank_pmid ~ rank_exp + coexp10 + essentiality_global + nearby_pmid + ppi + first_year + 
+  #     family_indexdiff + family_founder_rank + rank_cosmic + rank_gwas + homology_pmid, 
+  #   allfeat_red)
+  thelm
+  
+  #essentiality_ct  or   essentiality_global
+}
+
+
 ###############################################
 ## Nicely plot a correlation matrix
 ggplot_cor <- function(thecor){
@@ -17,7 +76,9 @@ ggplot_cor <- function(thecor){
   for(i in 1:nrow(thecor)){
     thecor[i,i] <- 0
   }
-  ggp <- ggplot(melt(thecor), aes(Var1, Var2, fill=value)) + 
+  tm <- melt(thecor)
+  colnames(tm) <- c("Var1","Var2","value")
+  ggp <- ggplot(tm, aes(Var1, Var2, fill=value)) + 
     theme(axis.text.x = element_text(angle = 90)) +
     scale_fill_gradient2(low="red", high="blue") +
     geom_tile() +
@@ -37,14 +98,15 @@ plot_staple_coef_multi <- function(list_thelm){
     thelm <- list_thelm[[n]]
     print(n)
     #print(thelm)
+    w <- get_lm_relweights(thelm)
+    
     one_coef <- data.frame(
       n=n,
-      sgn=sign(thelm$coefficients[-1]),
-      coef=thelm$coefficients[-1],
-      condition=names(thelm$coefficients)[-1]
+      sgn=sign(w),
+      coef=w,
+      condition=names(w)
     )
-    one_coef$coef <- one_coef$coef / sum(one_coef$coef[one_coef$coef>0])
-    
+    #one_coef$coef <- one_coef$coef / sum(one_coef$coef[one_coef$coef>0])
     
     thelm_coef <- rbind(
       thelm_coef,
@@ -62,43 +124,56 @@ plot_staple_coef_multi <- function(list_thelm){
 
 
 
-#############################################################
-############## Prepare data #################################
-#############################################################
 
-list.files("greta/feature/")
-cell_type <- "T cell"
-# cell_type <- "B cell"
-#cell_type <- "fibroblast"
-#cell_type <- "epithelial cell"
-
-allfeat <- read.csv(sprintf("greta/feature/%s.csv",cell_type))
-allfeat_meta <- allfeat[,c("gene","ct","orig_year")]
-allfeat_red <- allfeat[,!(colnames(allfeat) %in% c("gene","ct","orig_year"))]
 
 #############################################################
 ############## Simple global linear model ###################
 #############################################################
 
 
-## Try to explain with a linear model
+list.files("greta/feature/")
+#cell_type <- "T cell"
+# cell_type <- "B cell"
+#cell_type <- "fibroblast"
+cell_type <- "epithelial cell"
+allfeat <- read.csv(sprintf("greta/feature/%s.csv",cell_type))
+allfeat_meta <- allfeat[,c("gene","ct","orig_year")]
+allfeat_red <- allfeat[,!(colnames(allfeat) %in% c("gene","ct","orig_year"))]
 
 
+if(FALSE){
+  #thecor <- cor(allfeat_red)
+  thecor <- cor(allfeat_red[,!(colnames(allfeat_red) %in% c("pmid_count","rank_pmid"))])
+  ggplot_cor(thecor)
+  #ggsave("plots/lm_corr.pdf", ggplot_cor(thecor))
+  
+  
+  thecor <- cor(allfeat_red[,!(colnames(allfeat_red) %in% c("pmid_count"))])
+  ggplot_cor(thecor)
+  
+}
 
-#thecor <- cor(allfeat_red)
-thecor <- cor(allfeat_red[,!(colnames(allfeat_red) %in% c("pmid_count","rank_pmid"))])
-ggsave("plots/lm_corr.pdf", ggplot_cor(thecor))
 
 ################ Simplest linear model attempt
 
-thelm <- lm(
-  rank_pmid ~ rank_exp + coexp10 + perc_dependent_cells + nearby_pmid + ppi + first_year + family_indexdiff + family_founder_rank + rank_cosmic + rank_gwas + homology_pmid, 
-  allfeat_red)
+thelm  <- fit_lm(allfeat_red)
 round(thelm$coefficients, digits = 5)
+
+
 lm_rmse(thelm)
 plot_staple_coef_multi(list(foo=thelm))
-ggsave("plots/out_lm_all.pdf",plot = plot_staple_coef_multi(list(foo=thelm)))
+#ggsave("plots/out_lm_all.pdf",plot = plot_staple_coef_multi(list(foo=thelm)))
 
+### Since data not centered, can now rescale
+
+
+get_lm_relweights(thelm)
+get_lm_weights(thelm)
+
+# for(i in 1:nrow(outv)){
+#   outv[i,] <- outv[i,]/allfeat_red$rank_pmid[i]
+# }
+#as.matrix(allfeat_red[,names(b)]) %*% t(t(b))
 
 # 
 # (Intercept)             rank_exp              coexp10 perc_dependent_cells          nearby_pmid                  ppi 
@@ -114,14 +189,6 @@ ggsave("plots/out_lm_all.pdf",plot = plot_staple_coef_multi(list(foo=thelm)))
 ############## Linear model over time #######################
 #############################################################
 
-fit_lm <- function(allfeat_red){
-  #Should definitely not rescale - the scale should be representative. any shifts in points goes into the intercept
-  thelm <- lm(
-    rank_pmid ~ rank_exp + coexp10 + perc_dependent_cells + nearby_pmid + ppi + first_year + family_indexdiff + family_founder_rank + rank_cosmic + rank_gwas + homology_pmid, 
-    allfeat_red)
-  thelm
-}
-
 
 ############# Early genes vs late genes
 thelm_early <- fit_lm(allfeat_red[allfeat_meta$orig_year>=1970 & allfeat_meta$orig_year<2000,])
@@ -135,12 +202,15 @@ plot_staple_coef_multi(list(
 #### Windowed fit
 fit_year <- NULL
 coef_year <- NULL
+n_paper <- NULL
 for(i in 1970:2000){
-  f <- fit_lm(allfeat_red[allfeat_red_year>=i & allfeat_red_year<i+20,])
+  allfeat_red_w <- allfeat_red[allfeat_meta$orig_year>=i & allfeat_meta$orig_year<i+20,]
+  f <- fit_lm(allfeat_red_w)
   fit_year <- rbind(
     fit_year,
     data.frame(year=i, rmse=lm_rmse(f))
     )
+  n_paper <- c(n_paper, nrow(allfeat_red_w))
   coef_year <- rbind(coef_year, f$coefficients[-1])
 }
 
@@ -150,11 +220,12 @@ for(i in 1:nrow(coef_year)){
 #  coef_year[i,] <- coef_year[i,]/sum(abs(coef_year[i,]))
 #    coef_year[i,] <- coef_year[i,]/sum(coef_year[i,])
 #  coef_year[i,] <- coef_year[i,]/sd(coef_year[i,])
-  coef_year[i,] <- coef_year[i,]/sd(coef_year[i,-7])
+  coef_year[i,] <- coef_year[i,]/sd(coef_year[i,-7])   #what is 7?
 }
 
 #### RMSE over time
 plot(fit_year$year, fit_year$rmse, type="l")
+plot(fit_year$year, n_paper, type="l")   ### beep. 1970-1980, not many!
 
 #### Plot every feature over time
 list_plots <- list()
@@ -211,15 +282,16 @@ for(cell_type in all_cell_types){
   if(!any(is.na(allfeat_red)) & nrow(allfeat_red>3000)) {
 
     ## Try to explain with a linear model
-    thecor <- cor(allfeat_red[,-(1:2)])
+    thecor <- cor(allfeat_red[,-(1)])
     #round(thecor,digits = 2)
     sum_cor <- sum_cor + thecor
     num_cor <- num_cor + 1
 
     ### Fit model
-    thelm <- lm(
-      rank_pmid ~ rank_exp + coexp10 + perc_dependent_cells + nearby_pmid + ppi + first_year + family_indexdiff + family_founder_rank + rank_cosmic + rank_gwas, 
-      allfeat_red)
+    thelm <- fit_lm(allfeat_red)
+    # thelm <- lm(
+    #   rank_pmid ~ rank_exp + coexp10 + perc_dependent_cells + nearby_pmid + ppi + first_year + family_indexdiff + family_founder_rank + rank_cosmic + rank_gwas, 
+    #   allfeat_red)
     #round(thelm$coefficients, digits = 5)
     #lm_rmse(thelm)
     #plot_staple_coef_multi(list(foo=thelm))
@@ -228,19 +300,19 @@ for(cell_type in all_cell_types){
       all_ct_lm_coef,
       data.frame(
         ct=cell_type,
-        t(as.data.frame(thelm$coefficients[-1])))
+        t(get_lm_relweights(thelm)))
     )
     
   } else {
     print("   skipping, NA data")
   }
 }
-rownames(all_ct_lm_coef) <- NULL
+#rownames(all_ct_lm_coef) <- NULL
 
 #########################
 ## Look at average correlation
-ggsave("plots/lm_corr_avgct.pdf", ggplot_cor(sum_cor/num_cor))
 ggplot_cor(sum_cor/num_cor)
+#ggsave("plots/lm_corr_avgct.pdf", ggplot_cor(sum_cor/num_cor))
 
 
 #########################
