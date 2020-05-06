@@ -14,6 +14,8 @@ lm_rmse <- function(res){
 
 
 get_lm_weights <- function(thelm){
+  return(thelm$coefficients[-1]) ####################
+  
   if(FALSE){
     b <- thelm$coefficients[-1]
     outv <- allfeat_red[,names(b)]
@@ -37,9 +39,9 @@ get_lm_weights <- function(thelm){
 
 get_lm_relweights <- function(thelm){
   cm <- get_lm_weights(thelm)
-  #cm <- cm/sd(cm)
-  cm <- cm/-cm["first_year"]
-  cm <- cm[names(cm)!="first_year"]
+  cm <- cm/sd(cm)
+  #cm <- cm/-cm["first_year"]
+  #cm <- cm[names(cm)!="first_year"]
   #/-min(colMeans(outv))
   cm
 }
@@ -53,8 +55,9 @@ fit_lm <- function(allfeat_red){
   allfeat_red$first_year4 <- allfeat_red$first_year**4
   
   thelm <- lm(
-    rank_pmid ~ rank_exp + coexp10 + essentiality_global + nearby_pmid + ppi + 
-      first_year + first_year2 + first_year3 + first_year4+
+    rank_pmid ~ rank_exp + coexp10 +  nearby_pmid + ppi + 
+      essentiality_global + essentiality_ct + 
+      first_year + #first_year2 + first_year3 + # first_year4+
       family_indexdiff + family_founder_rank + rank_cosmic + rank_gwas + homology_pmid, 
     allfeat_red)
   
@@ -132,23 +135,24 @@ plot_staple_coef_multi <- function(list_thelm){
 
 
 list.files("greta/feature/")
-#cell_type <- "T cell"
+cell_type <- "T cell"
 # cell_type <- "B cell"
 #cell_type <- "fibroblast"
-cell_type <- "epithelial cell"
+#cell_type <- "epithelial cell"
 allfeat <- read.csv(sprintf("greta/feature/%s.csv",cell_type))
 allfeat_meta <- allfeat[,c("gene","ct","orig_year")]
 allfeat_red <- allfeat[,!(colnames(allfeat) %in% c("gene","ct","orig_year"))]
 
+hist(allfeat$rank_pmid)
 
 if(FALSE){
   #thecor <- cor(allfeat_red)
-  thecor <- cor(allfeat_red[,!(colnames(allfeat_red) %in% c("pmid_count","rank_pmid"))])
+  thecor <- cor(allfeat_red[,!(colnames(allfeat_red) %in% c("pmid_count","rank_pmid"))], method = "spearman")
   ggplot_cor(thecor)
   #ggsave("plots/lm_corr.pdf", ggplot_cor(thecor))
   
   
-  thecor <- cor(allfeat_red[,!(colnames(allfeat_red) %in% c("pmid_count"))])
+  thecor <- cor(allfeat_red[,!(colnames(allfeat_red) %in% c("pmid_count"))], method = "spearman")
   ggplot_cor(thecor)
   
 }
@@ -158,6 +162,7 @@ if(FALSE){
 
 thelm  <- fit_lm(allfeat_red)
 round(thelm$coefficients, digits = 5)
+anova(thelm)
 
 
 lm_rmse(thelm)
@@ -169,6 +174,52 @@ plot_staple_coef_multi(list(foo=thelm))
 
 get_lm_relweights(thelm)
 get_lm_weights(thelm)
+
+
+if(FALSE){
+  
+  
+  b <- thelm$coefficients[-1]
+  outv <- allfeat_red[,names(b)]
+  for(i in 1:ncol(outv)){
+    outv[,i] <- outv[,i]*b[i]#/allfeat_red$rank_pmid       #dividing here makes this model rather unstable. low rank genes cause issues
+  }
+  
+  i<-1
+  colnames(outv)[i]
+  
+  va <- data.frame(
+    val=outv[,i],
+    year=allfeat_meta$orig_year)
+  va <- sqldf("select avg(val) as val, year from va group by year order by year")
+  plot(allfeat_meta$orig_year + runif(nrow(allfeat_meta)), outv[,i], ylab=colnames(outv)[i], xlab="year")
+  lines(va$year, va$val, col="red")
+  
+  plot(
+    rank_nogap(allfeat_red$rank_exp),
+    rank_nogap(allfeat_red$rank_pmid), cex=0.5)
+  #rank_pmid always more than cosmic - cosmic starts later
+  #not the case with gwas
+  #why with exp?  whyyyyyyyy?
+  
+  plot(
+    rank_nogap(allfeat_red$rank_exp),
+    rank_nogap(allfeat_red$rank_pmid - outv$first_year), cex=0.5)
+  
+  #d <- density(x, bw = 5, 
+               
+               # "nrd0", adjust = 1,
+               # kernel = c("gaussian", "epanechnikov", "rectangular",
+               #            "triangular", "biweight",
+               #            "cosine", "optcosine"),
+               # weights = NULL, window = kernel, width,
+               # give.Rkern = FALSE,
+               # n = 512, from, to, cut = 3, na.rm = FALSE, ...))
+  
+  #cm <- colMeans(outv)
+  #cm
+  
+}
 
 # for(i in 1:nrow(outv)){
 #   outv[i,] <- outv[i,]/allfeat_red$rank_pmid[i]
@@ -204,7 +255,7 @@ fit_year <- NULL
 coef_year <- NULL
 n_paper <- NULL
 for(i in 1970:2000){
-  allfeat_red_w <- allfeat_red[allfeat_meta$orig_year>=i & allfeat_meta$orig_year<i+20,]
+  allfeat_red_w <- allfeat_red[allfeat_meta$orig_year>=i & allfeat_meta$orig_year<i+20& allfeat_meta$orig_year<last(allfeat_meta$orig_year),]
   f <- fit_lm(allfeat_red_w)
   fit_year <- rbind(
     fit_year,
@@ -220,7 +271,7 @@ for(i in 1:nrow(coef_year)){
 #  coef_year[i,] <- coef_year[i,]/sum(abs(coef_year[i,]))
 #    coef_year[i,] <- coef_year[i,]/sum(coef_year[i,])
 #  coef_year[i,] <- coef_year[i,]/sd(coef_year[i,])
-  coef_year[i,] <- coef_year[i,]/sd(coef_year[i,-7])   #what is 7?
+#  coef_year[i,] <- coef_year[i,]/sd(coef_year[i,-7])   #what is 7?
 }
 
 #### RMSE over time
@@ -235,7 +286,7 @@ for(the_feature in colnames(coef_year)){
     coef=coef_year[,the_feature],
     year=fit_year$year)
   
-  list_plots[[the_feature]] <- ggplot(dat, aes(y=coef,x=year)) +
+  list_plots[[the_feature]] <- ggplot(dat, aes(y=coef,x=year)) +  ################## just not possible to do it this way! #######################
     geom_line(size=1, colour="blue") +
     ylim(min(c(dat$coef,0)), max(c(dat$coef,0))) +
     xlab("") +
