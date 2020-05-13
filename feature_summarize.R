@@ -14,10 +14,18 @@ library(FNN)
 library(RSQLite)
 library(igraph)
 library(reshape)
+library(DESeq)
 
+
+normalizeDeseqByGenes <- function(cnt) t(t(cnt)/estimateSizeFactorsForMatrix(cnt[-grep("ERCC",rownames(cnt)),]))
+normalizeDeseqByERCC   <- function(cnt) t(t(cnt)/estimateSizeFactorsForMatrix(cnt[grep("ERCC",rownames(cnt)),]))
+normalizeDeseqByAll   <- function(cnt) t(t(cnt)/estimateSizeFactorsForMatrix(cnt))
+
+
+#############################################################
+## Link rank(), but produces to gaps between the values
 rank_nogap <- function(x){
-  #x <- c(1,2,2,2,2,2,5,7,4)
-  ux <- unique(x)
+  ux <- sort(unique(x))
   nux <- merge(
     data.frame(
       orig_ind=1:length(x),
@@ -36,19 +44,19 @@ rank_nogap <- function(x){
 ## Function: Rank a column within each cell type (column ct)
 rank_by_ct <- function(dat, col){
   for(ct in unique(dat$ct)){
-    x <- dat[dat$ct==ct,col]
+    #x <- dat[dat$ct==ct,col]
 
     #fp <- fitdist(x, "pareto")
     #px <- dinvpareto(x, shape = fp$estimate[1], scale = fp$estimate[2], log = FALSE)
     #dat[dat$ct==ct,col] <- 
     
     #dat[dat$ct==ct,col] <- (dat[dat$ct==ct,col])
-    dat[dat$ct==ct,col] <- rank_nogap(dat[dat$ct==ct,col])
+    #dat[dat$ct==ct,col] <- rank_nogap(dat[dat$ct==ct,col])
     #dat[dat$ct==ct,col] <- rank(dat[dat$ct==ct,col])
 
     
   }
-  dat[,col]
+  rank(dat[,col])
 }
 
 if(FALSE){
@@ -118,6 +126,76 @@ graph_layout_to_df <- function(graph_df, ct=NULL) {
 
 
 
+
+############################################################
+## Calculate neighbour avg(PMID), given a graph. 
+## graph currently does not have ct, code can be made to use it optionally
+calc_neigh_pmid <- function(graph, feature_pmidcount, featurename){
+  #symmetrize graph
+  graph <- unique(rbind(
+    graph,
+    data.frame(
+      from=graph$to,
+      to=graph$from
+    )
+  ))
+  
+  ### Removing self interactions
+  graph<-graph[graph$from!=graph$to,]
+  
+  ## Assemble from-to neighbour PMID table. Can do all cell types in one go
+  neigh_pmid <- merge(
+    data.frame(
+      neigh=feature_pmidcount$gene,
+      ct=feature_pmidcount$ct,
+      neigh_rank_pmid=feature_pmidcount$rank_pmid
+    ),
+    data.frame(
+      gene=graph$from,
+      neigh=graph$to
+    )
+  )
+  
+  
+  #Calculate neighbour average PMID
+  neigh_pmid <- sqldf("select gene, ct,  avg(neigh_rank_pmid) as neigh_pmid from neigh_pmid group by gene,ct")
+  
+  #Rename new feature
+  colnames(neigh_pmid)[colnames(neigh_pmid)=="neigh_pmid"] <- featurename
+  
+  neigh_pmid
+}
+
+
+
+
+###############################################
+## Replace NA in each column with a neutral value
+replace_feat_na <- function(allfeat, replace.func=median){
+  for(i in 1:ncol(allfeat)){
+    nalines <- is.na(allfeat[,i])
+    allfeat[nalines,i] <- replace.func(allfeat[!nalines,i])#,na.rm = TRUE)
+  }
+  allfeat
+}
+
+
+###############################################
+## Replace NA in one column with a neutral value
+replace_feat_na_one <- function(allfeat, colname, replace.func=median){
+  nalines <- is.na(allfeat[,colname])
+  allfeat[nalines,colname] <- replace.func(allfeat[!nalines,colname])
+  allfeat
+}
+
+
+
+####################################################################################################################
+####################################################################################################################
+####################################################################################################################
+
+
+
 #############################################################
 ########## How many papers per gene and cell type? ##########
 #############################################################
@@ -166,35 +244,38 @@ if(file.exists("features/keywords_pmids.csv")){
   write.csv(pmid_term,"features/keywords_pmids.csv")
 }
 
-############# Create #paper for each gene and cell type
+############# Create #paper for each gene AND cell type
+#############
 
+### Calculate #paper / gene
+ranked_pmid_ct_gene <- merge(pmid_term, g2phm_genespresent)
+feature_pmidcount_ct <- sqldf("select gene, count(pmid) as pmid_count from ranked_pmid_ct_gene group by gene, ct")
 
-if(file.exists("features/feature_ranked_pmid.csv")) {
-  
-  ### Load from disk
-  feature_pmidcount <- read.csv("features/feature_ranked_pmid.csv", stringsAsFactors=FALSE)
-  
-} else {
-  
-  ### Calculate #paper / ct,gene
-  ranked_pmid_ct_gene <- merge(pmid_term, g2phm_genespresent)
-  feature_pmidcount <- sqldf("select gene, ct, count(pmid) as pmid_count from ranked_pmid_ct_gene group by gene, ct")
-  
-  ### Not a full matrix - some papers missed. Fill in with 0s
-  if(TRUE){
-    tab <- cast(feature_pmidcount,gene~ct, fill = 0, value = "pmid_count")
-    feature_pmidcount <- melt(tab)
-    colnames(feature_pmidcount) <- c("gene","pmid_count","ct")
-    rownames(feature_pmidcount) <- NULL
-  }
-  
-  ### Do the ranking
-  feature_pmidcount$rank_pmid <- rank_by_ct(feature_pmidcount, "pmid_count")
-  
-  ### Store  
-  write.csv(feature_pmidcount, "features/feature_ranked_pmid.csv", row.names = F)
-  
+### Not a full matrix - some papers missed. Fill in with 0s
+if(TRUE){
+  tab <- cast(feature_pmidcount_ct,gene~ct, fill = 0, value = "pmid_count")
+  feature_pmidcount_ct <- melt(tab)
+  colnames(feature_pmidcount_ct) <- c("gene","pmid_count","ct")
+  rownames(feature_pmidcount_ct) <- NULL
 }
+
+### Do the ranking and store
+feature_pmidcount_ct$rank_pmid <- rank_by_ct(feature_pmidcount_ct, "pmid_count")
+write.csv(feature_pmidcount_ct, "features/feature_ranked_pmid_ct.csv", row.names = F)
+  
+
+
+############# Create #paper for each gene GLOBALLY
+#############
+
+### Calculate #paper / ct,gene
+feature_pmidcount <- sqldf("select gene, count(pmid) as pmid_count from pmid_term group by gene")
+
+### Do the ranking and store
+feature_pmidcount$rank_pmid <- log10(1+feature_pmidcount$rank_pmid)
+write.csv(feature_pmidcount, "features/feature_ranked_pmid.csv", row.names = F)
+
+
 
 
 ############# Calculate rank #paper
@@ -294,6 +375,11 @@ if(file.exists("features/feature_geneexp.csv")) {
   ### For each cell type, find rank average expression level
   feature_exp <- NULL
   for (i in 1:nrow(tissue_celltype_count_max)){
+    
+    #i<-43
+    #i<-44  #T cell
+    #gata3 looks better in epithelial cell?
+     
     the_tissue <- tissue_celltype_count_max$tissue[i]
     the_ct <- tissue_celltype_count_max$ct[i]
     print(sprintf("%s -- %s" , the_tissue, the_ct))
@@ -301,15 +387,23 @@ if(file.exists("features/feature_geneexp.csv")) {
     #Extract count table for this cell type  
     #tissue_count <- count_norm_colmeans(tissue)   #if need to load on the fly
     tissue_count <- FACS_norm_arrays[[the_tissue]]
-    input <- tissue_count[,colnames(tissue_count) %in% new_FACS_ontology$cell[new_FACS_ontology$collapsed==the_ct]]
-    input <- log10(1+input)
+    input <- tissue_count#[,colnames(tissue_count) %in% new_FACS_ontology$cell[new_FACS_ontology$collapsed==the_ct]]
+    
+    #Normal size factor normalization  -- this might already have been done
+    # input <- normalizeDeseqByGenes(input)
+    #
+    plot(sort(colMeans(input)))#, breaks=100)
+    hist(input["Gata3",],breaks=100)
+    # 
+    # # Work on log-scale instead
+    # input <- log10(1+input)
     
     ### TODO size factor normalization?
     
     feature_one_exp <- data.frame(
       gene=rownames(input),
       ct=the_ct,
-      rank_exp=rank(rowMeans(input))
+      rank_exp=rowMeans(input)   #rank(rowMeans(input))    # consider alternatives?
     )
     
     feature_exp <- rbind(
@@ -330,48 +424,6 @@ if(file.exists("features/feature_geneexp.csv")) {
 #############################################################
 ######### Features from co-expression #######################
 #############################################################
-
-
-
-############################################################
-## Calculate neighbour avg(PMID), given a graph. 
-## graph currently does not have ct, code can be made to use it optionally
-calc_neigh_pmid <- function(graph, feature_pmidcount, featurename){
-  #symmetrize graph
-  graph <- unique(rbind(
-    graph,
-    data.frame(
-      from=graph$to,
-      to=graph$from
-    )
-  ))
-  
-  ### Removing self interactions
-  graph<-graph[graph$from!=graph$to,]
-  
-  ## Assemble from-to neighbour PMID table. Can do all cell types in one go
-  neigh_pmid <- merge(
-    data.frame(
-      neigh=feature_pmidcount$gene,
-      ct=feature_pmidcount$ct,
-      neigh_rank_pmid=feature_pmidcount$rank_pmid
-    ),
-    data.frame(
-      gene=graph$from,
-      neigh=graph$to
-    )
-  )
-  
-  
-  #Calculate neighbour average PMID
-  neigh_pmid <- sqldf("select gene, ct,  avg(neigh_rank_pmid) as neigh_pmid from neigh_pmid group by gene,ct")
-  
-  #Rename new feature
-  colnames(neigh_pmid)[colnames(neigh_pmid)=="neigh_pmid"] <- featurename
-  
-  neigh_pmid
-}
-
 
 
 if(file.exists("features/feature_coexp.csv")) {
@@ -496,150 +548,142 @@ if(file.exists("features/feature_coexp.csv")) {
 ############## Features from chromatin structure ############
 #############################################################
 
-if(file.exists("features/feature_chromloc.csv")) {
-  
-  feature_chromloc <- read.csv("features/feature_chromloc.csv", stringsAsFactors = FALSE)
-  
-} else {
-  
-  
-  
-  ### Read chromosome locations of genes
-  gtf <- read.table("input/Mus_musculus.GRCm38.97.gtf",sep="\t", stringsAsFactors=FALSE)
-  gtf <- gtf[gtf$V3 =="gene",]
-  
-  extract_genename <- function(s) {
-    gs <- str_extract(s,"gene_name [a-zA-Z0-9\\-]+")
-    if(is.na(gs)){
-      return("")
-    } else {
-      return(str_sub(gs, 11))
-    }
-  }
-  
-  extract_ensid <- function(s) {
-    gs <- str_extract(s,"gene_id [a-zA-Z0-9]+")
-    if(is.na(gs)){
-      return("")
-    } else {
-      return(str_sub(gs, 9))
-    }
-  }
-  
-  
-  extract_gene_version <- function(s) {
-    gs <- str_extract(s,"gene_version [a-zA-Z0-9]+")
-    if(is.na(gs)){
-      return("")
-    } else {
-      return(str_sub(gs, 14))
-    }
-  }
-  
-  
-  ## Only keep these "proper" chromosomes
-  consider_chrom <- c(1:19, "X","Y")
-  
-  ### Compute gene midpoints   -- mistake, bad name, reused later
-  feature_chromloc <- data.frame(
-    chrom=gtf$V1,
-    pos  = (gtf$V4 + gtf$V5)/2,
-    gene = unname(sapply(gtf$V9, extract_genename)),
-    ensid = unname(sapply(gtf$V9, extract_ensid)),
-    genever = as.double(unname(sapply(gtf$V9, extract_gene_version))),
-    stringsAsFactors = FALSE
-  )
-  
-  ### Filter out earlier gene versions
-  feature_chromloc <- merge(feature_chromloc,sqldf("select gene, max(genever) as genever from feature_chromloc group by gene"))
-  
-  ### Filter out weird gene symbols and chromosomes
-  feature_chromloc <- unique(feature_chromloc[feature_chromloc$gene %in% feature_pmidcount$gene & feature_chromloc$chrom %in% consider_chrom, ])
-  
-  #Crucial ordering for later
-  feature_chromloc <- feature_chromloc[order(feature_chromloc$pos),]
-  
-  
-  ###########################################
-  ## Prepare coordinates for website
-  coord_chrom <- merge(
-    feature_chromloc,
-    data.frame(
-      chrom=consider_chrom, 
-      y=1:length(consider_chrom)
-    ))
-  coord_chrom <- data.frame(
-    gene=coord_chrom$gene,
-    x=coord_chrom$pos,
-    y=coord_chrom$y)
-  store_website_coordinates("chrom",coord_chrom)
-  
-  ###########################################
-  ## Calculate avg(#PMID) of the k nearest neigbours along the chromosome.
-  ## Assumes only one cell type
-  calc_nearby_pmid <- function(dat, nearby_range=2){
-    # For each gene, find the closest two genes. Since we only care about average positions,
-    # this means we can simply consider a shorted list
-    datsub <- dat[order(dat$pos),]
-    datchrom_all <- NULL
-    #Run for each chromosome
-    for(curchrom in unique(datsub$chrom)){
-      datchrom <- datsub[datsub$chrom==curchrom,]
-      datchrom <- datchrom[order(datchrom$pos),]
-      #For each gene
-      datchrom$nearby_pmid <- NA
-      for(i in 1:nrow(datchrom)){
-        this_pmid  <- datchrom$rank_pmid[i]
-        other_index <- c(max(1,i-nearby_range):min(i+nearby_range, nrow(datchrom)))
-        other_index <- other_index[other_index!=i]
-        #print(c(i,other_index))
-        other_pmid <- datchrom$rank_pmid[other_index]
-        datchrom$nearby_pmid[i] <- mean(other_pmid)
-      }
-      datchrom_all <- rbind(
-        datchrom_all, 
-        datchrom)
-    }
-    datchrom_all <- datchrom_all[!is.na(datchrom_all$nearby_pmid),]
-    datchrom_all
-  }
-  
-  #### For testing
-  # datchrom <- calc_nearby_pmid(dat)  #for all
-  # unique(dat$ct)
-  # datchrom <- calc_nearby_pmid(dat[dat$ct=="T cell",])
-  # plot(datchrom$rank_pmid, datchrom$nearby_pmid, 
-  #      xlab="Rank #PMID", ylab="Nearby gene Rank #PMID")
-  # cor(datchrom$rank_pmid, datchrom$nearby_pmid)#, method = "spearman")
-  
-  #### Link location - #PMID
-  dat <- merge(feature_chromloc, feature_pmidcount)
-  
-  #### Calculate neighbour #PMID, for all cell types (need to do one ct at a time)
-  datchrom_all <- NULL
-  for(ct in unique(dat$ct)){
-    print(ct)
-    dat_for_ct <- dat[dat$ct==ct,]
-    neigh_for_ct <- calc_nearby_pmid(dat_for_ct)
-    datchrom_all <- rbind(
-      datchrom_all,
-      neigh_for_ct)  
-  }
-  
-  
-  #### Generate feature: Chromatin structure #PMID
-  feature_chromloc <- datchrom_all[,c("gene","ct","nearby_pmid")]
-  length(unique(feature_chromloc$gene))
 
-  nrow((feature_chromloc))
-  nrow(unique(feature_chromloc))
-  
-  #### Store feature
-  write.csv(
-    feature_chromloc, 
-    "features/feature_chromloc.csv", row.names = FALSE)
-  
+### Read chromosome locations of genes
+gtf <- read.table("input/Mus_musculus.GRCm38.97.gtf",sep="\t", stringsAsFactors=FALSE)
+gtf <- gtf[gtf$V3 =="gene",]
+
+extract_genename <- function(s) {
+  gs <- str_extract(s,"gene_name [a-zA-Z0-9\\-]+")
+  if(is.na(gs)){
+    return("")
+  } else {
+    return(str_sub(gs, 11))
+  }
 }
+
+extract_ensid <- function(s) {
+  gs <- str_extract(s,"gene_id [a-zA-Z0-9]+")
+  if(is.na(gs)){
+    return("")
+  } else {
+    return(str_sub(gs, 9))
+  }
+}
+
+
+extract_gene_version <- function(s) {
+  gs <- str_extract(s,"gene_version [a-zA-Z0-9]+")
+  if(is.na(gs)){
+    return("")
+  } else {
+    return(str_sub(gs, 14))
+  }
+}
+
+
+## Only keep these "proper" chromosomes
+consider_chrom <- c(1:19, "X","Y")
+
+### Compute gene midpoints   -- mistake, bad name, reused later
+feature_chromloc <- data.frame(
+  chrom=gtf$V1,
+  pos  = (gtf$V4 + gtf$V5)/2,
+  gene = unname(sapply(gtf$V9, extract_genename)),
+  ensid = unname(sapply(gtf$V9, extract_ensid)),
+  genever = as.double(unname(sapply(gtf$V9, extract_gene_version))),
+  stringsAsFactors = FALSE
+)
+
+### Filter out earlier gene versions
+feature_chromloc <- merge(feature_chromloc,sqldf("select gene, max(genever) as genever from feature_chromloc group by gene"))
+
+### Filter out weird gene symbols and chromosomes
+feature_chromloc <- unique(feature_chromloc[feature_chromloc$gene %in% feature_pmidcount$gene & feature_chromloc$chrom %in% consider_chrom, ])
+
+#Crucial ordering for later
+feature_chromloc <- feature_chromloc[order(feature_chromloc$pos),]
+
+
+###########################################
+## Prepare coordinates for website
+coord_chrom <- merge(
+  feature_chromloc,
+  data.frame(
+    chrom=consider_chrom, 
+    y=1:length(consider_chrom)
+  ))
+coord_chrom <- data.frame(
+  gene=coord_chrom$gene,
+  x=coord_chrom$pos,
+  y=coord_chrom$y)
+store_website_coordinates("chrom",coord_chrom)
+
+###########################################
+## Calculate avg(#PMID) of the k nearest neigbours along the chromosome.
+## Assumes only one cell type
+calc_nearby_pmid <- function(dat, nearby_range=2){
+  # For each gene, find the closest two genes. Since we only care about average positions,
+  # this means we can simply consider a shorted list
+  datsub <- dat[order(dat$pos),]
+  datchrom_all <- NULL
+  #Run for each chromosome
+  for(curchrom in unique(datsub$chrom)){
+    datchrom <- datsub[datsub$chrom==curchrom,]
+    datchrom <- datchrom[order(datchrom$pos),]
+    #For each gene
+    datchrom$nearby_pmid <- NA
+    for(i in 1:nrow(datchrom)){
+      this_pmid  <- datchrom$rank_pmid[i]
+      other_index <- c(max(1,i-nearby_range):min(i+nearby_range, nrow(datchrom)))
+      other_index <- other_index[other_index!=i]
+      #print(c(i,other_index))
+      other_pmid <- datchrom$rank_pmid[other_index]
+      datchrom$nearby_pmid[i] <- mean(other_pmid)
+    }
+    datchrom_all <- rbind(
+      datchrom_all, 
+      datchrom)
+  }
+  datchrom_all <- datchrom_all[!is.na(datchrom_all$nearby_pmid),]
+  datchrom_all
+}
+
+#### For testing
+# datchrom <- calc_nearby_pmid(dat)  #for all
+# unique(dat$ct)
+# datchrom <- calc_nearby_pmid(dat[dat$ct=="T cell",])
+# plot(datchrom$rank_pmid, datchrom$nearby_pmid, 
+#      xlab="Rank #PMID", ylab="Nearby gene Rank #PMID")
+# cor(datchrom$rank_pmid, datchrom$nearby_pmid)#, method = "spearman")
+
+#### Link location - #PMID
+dat <- merge(feature_chromloc, feature_pmidcount)
+
+#### Calculate neighbour #PMID, for all cell types (need to do one ct at a time)
+datchrom_all <- NULL
+for(ct in unique(dat$ct)){
+  print(ct)
+  dat_for_ct <- dat[dat$ct==ct,]
+  neigh_for_ct <- calc_nearby_pmid(dat_for_ct)
+  datchrom_all <- rbind(
+    datchrom_all,
+    neigh_for_ct)  
+}
+
+
+#### Generate feature: Chromatin structure #PMID
+feature_chromloc <- datchrom_all[,c("gene","ct","nearby_pmid")]
+length(unique(feature_chromloc$gene))
+
+nrow((feature_chromloc))
+nrow(unique(feature_chromloc))
+
+#### Store feature
+write.csv(
+  feature_chromloc, 
+  "features/feature_chromloc.csv", row.names = FALSE)
+  
 
 
 #### Quick plotting of correlation
@@ -688,34 +732,25 @@ if(FALSE){
 ###### Features from gene homology graph neighbours #########
 #############################################################
 
-if(file.exists("features/feature_homology_pmid.csv")) {
+## Full graph; don't do this
+#graph_homology <- read.table("homology_graph.csv", sep="\t")[,1:2]#, col.names = FALSE)#[,c("from","to")]
+#colnames(graph_homology) <- c("from","to")
+
+## Read reduced homology graph
+graph_homology <- read.csv("homology/homology_graph.red.csv")[,c("from","to")]
+
+## Generate feature: homology neighbour #PMID
+feature_homology_pmid <- calc_neigh_pmid(graph_homology, feature_pmidcount, "homology_pmid")
+feature_homology_pmid <- feature_homology_pmid[,c("gene","ct","homology_pmid")]
+
+write.csv(
+  feature_homology_pmid, 
+  "features/feature_homology_pmid.csv", row.names = FALSE)
+
+
+## Store graph for website use
+store_website_coordinates("homology",graph_layout_to_df(graph_homology))
   
-  feature_homology_pmid <- read.csv("features/feature_homology_pmid.csv", stringsAsFactors = FALSE)
-  
-} else {
-  
-  ## Full graph; don't do this
-  #graph_homology <- read.table("homology_graph.csv", sep="\t")[,1:2]#, col.names = FALSE)#[,c("from","to")]
-  #colnames(graph_homology) <- c("from","to")
-  
-  ## Read reduced homology graph
-  graph_homology <- read.csv("homology/homology_graph.red.csv")[,c("from","to")]
-  
-  ## Generate feature: homology neighbour #PMID
-  feature_homology_pmid <- calc_neigh_pmid(graph_homology, feature_pmidcount, "homology_pmid")
-  feature_homology_pmid <- feature_homology_pmid[,c("gene","ct","homology_pmid")]
-  
-  write.csv(
-    feature_homology_pmid, 
-    "features/feature_homology_pmid.csv", row.names = FALSE)
-  
-  
-  ## Store graph for website use
-  store_website_coordinates("homology",graph_layout_to_df(graph_homology))
-  
-  
-  
-}
 
 
 
@@ -913,11 +948,12 @@ crispr_data_working <- merge(
 #### Extract feature
 feature_essentiality <- sqldf("select mouse_symbol as gene, avg(essentiality_global) as essentiality_global from crispr_data_working group by gene")
 
-### Store feature, gene essentiality
+### Store feature, gene essentiality (global)
 write.csv(
   feature_essentiality,   #note - no cell type
   "features/feature_essentiality_global.csv", row.names = FALSE)
 
+###### Set up cell type-specific essentiality:
 
 ### Adding collapsed cell type terminology as proxy for cancer celltype and keeping feature as feature_crispr_ct_dependency
 unique_celltype_mapping <- read.csv("input/unique_celltypes.csv", stringsAsFactors = F)
@@ -928,6 +964,7 @@ colnames(crispr_data_working_unique_celltype) <- c("gene","cancer_tissue", "esse
 feature_essentiality_ct <- unique(merge(crispr_data_working_unique_celltype, unique_celltype_mapping, by= "cancer_tissue")[,c(2,3,4)])
 feature_essentiality_ct$essentiality_ct <- as.double(feature_essentiality_ct$essentiality_ct)
 
+### One cell type is in multiple tissues; reduce to one value
 feature_essentiality_ct <- sqldf("select gene, max(essentiality_ct) as essentiality_ct, ct from feature_essentiality_ct group by gene,ct")
 
 ### Store feature, gene essentiality for ct
@@ -1042,27 +1079,6 @@ if(file.file.exists("features/feature_minyear_gene_ct.csv")){
 ###############################################################################################################
 
 
-
-
-
-###############################################
-## Replace NA in each column with a neutral value
-replace_feat_na <- function(allfeat, replace.func=median){
-  for(i in 1:ncol(allfeat)){
-    nalines <- is.na(allfeat[,i])
-    allfeat[nalines,i] <- replace.func(allfeat[!nalines,i])#,na.rm = TRUE)
-  }
-  allfeat
-}
-
-
-###############################################
-## Replace NA in one column with a neutral value
-replace_feat_na_one <- function(allfeat, colname, replace.func=median){
-  nalines <- is.na(allfeat[,colname])
-  allfeat[nalines,colname] <- replace.func(allfeat[!nalines,colname])
-  allfeat
-}
 
 
 
