@@ -39,7 +39,8 @@ get_lm_weights <- function(thelm){
 
 get_lm_relweights <- function(thelm){
   cm <- get_lm_weights(thelm)
-  cm <- cm/sd(cm)
+#  cm <- cm/sd(cm)
+  cm <- cm/sum(pmax(cm,0))
   #cm <- cm/-cm["first_year"]
   #cm <- cm[names(cm)!="first_year"]
   #/-min(colMeans(outv))
@@ -50,16 +51,46 @@ get_lm_relweights <- function(thelm){
 ## Function: Model fitting
 fit_lm <- function(allfeat_red){
   
-  allfeat_red$first_year2 <- allfeat_red$first_year**2
-  allfeat_red$first_year3 <- allfeat_red$first_year**3
-  allfeat_red$first_year4 <- allfeat_red$first_year**4
+  print(sprintf("Rows to fit on: %s",nrow(allfeat_red)))
+  # thelm <- lm(
+  #   rank_pmid ~ rank_exp + coexp10 +   ppi + 
+  #     nearby_pmid +
+  #     essentiality_global +# essentiality_ct + 
+  #     first_year + #first_year2 + first_year3 + # first_year4+
+  #     #rank_gwas_1 +
+  #     family_indexdiff + 
+  #     family_founder_rank + #confounded with index diff
+  #     rank_cosmic + 
+  #     rank_gwas + homology_pmid, 
+  #   allfeat_red)
+  
   
   thelm <- lm(
-    rank_pmid ~ rank_exp + coexp10 +  nearby_pmid + ppi + 
-      essentiality_global + essentiality_ct + 
-      first_year + #first_year2 + first_year3 + # first_year4+
-      family_indexdiff + family_founder_rank + rank_cosmic + rank_gwas + homology_pmid, 
+    rank_pmid ~ rank_exp + coexp10 +   ppi + 
+      nearby_pmid +
+      essentiality_global +
+      first_year + 
+      family_indexdiff + 
+      family_founder_rank + 
+      rank_cosmic + 
+      rank_gwas + homology_pmid, 
     allfeat_red)
+  
+  
+  if("founder_fitted_pmid" %in% colnames(allfeat_red)){
+    thelm <- lm(
+      rank_pmid ~ rank_exp + coexp10 +   ppi + 
+        nearby_pmid +
+        essentiality_global +
+        first_year + 
+        founder_fitted_pmid +
+        family_indexdiff +
+        rank_cosmic + 
+        rank_gwas + homology_pmid, 
+      allfeat_red)
+    
+  }
+  
   
   #Should definitely not rescale - the scale should be representative. any shifts in points goes into the intercept
   # thelm <- lm(
@@ -69,6 +100,27 @@ fit_lm <- function(allfeat_red){
   thelm
   
   #essentiality_ct  or   essentiality_global
+}
+
+
+
+
+###############################################
+## Function: Model fitting
+fit_lm_nofounder <- function(allfeat_red){
+  
+  thelm <- lm(
+    rank_pmid ~ rank_exp + coexp10 +   ppi + 
+      nearby_pmid +
+      essentiality_global +
+      first_year + 
+      #family_indexdiff + 
+      #family_founder_rank + 
+      rank_cosmic + 
+      rank_gwas + homology_pmid, 
+    allfeat_red)
+  
+  thelm
 }
 
 
@@ -136,14 +188,82 @@ plot_staple_coef_multi <- function(list_thelm){
 
 list.files("greta/feature/")
 cell_type <- "T cell"
-# cell_type <- "B cell"
+#cell_type <- "B cell"
 #cell_type <- "fibroblast"
 #cell_type <- "epithelial cell"
 allfeat <- read.csv(sprintf("greta/feature/%s.csv",cell_type))
-allfeat_meta <- allfeat[,c("gene","ct","orig_year")]
-allfeat_red <- allfeat[,!(colnames(allfeat) %in% c("gene","ct","orig_year"))]
 
-hist(allfeat$rank_pmid)
+### before 1975, not so much. definitely avoid <1950
+allfeat <- allfeat[allfeat$orig_year>=1970,]  ################# note, affects before after!
+
+
+meta_names <- c("gene","ct","founder_name",   "orig_year", "has_founder")
+allfeat_meta <- allfeat[,meta_names]
+allfeat_red <- allfeat[,!(colnames(allfeat) %in% meta_names)]
+allfeat_meta$has_founder[is.na(allfeat_meta$has_founder)] <- FALSE
+
+#hist(allfeat$rank_pmid)
+
+if(FALSE){
+  plot(
+    rank(allfeat$rank_gwas),
+    allfeat$rank_pmid,
+    cex=0.5)
+
+  plot(
+    allfeat$rank_exp,
+    allfeat$rank_pmid,
+    cex=0.5)
+  
+  plot(
+    allfeat$essentiality_global,   #Clear trend
+    allfeat$rank_pmid,
+    cex=0.5)
+  
+  plot(
+    allfeat$essentiality_ct,   #this seems broken?  or just because few cell types?
+    allfeat$rank_pmid,
+    cex=0.5)  
+  
+  plot(
+    allfeat$nearby_pmid,   #looks fine - just weak trend
+    allfeat$rank_pmid,
+    cex=0.5)  
+
+  plot(
+    allfeat$rank_cosmic,   #clear trend
+    allfeat$rank_pmid,
+    cex=0.5)  
+  
+  plot(
+    (allfeat$homology_pmid),   #trend is more clear if using rank. but there in either case
+    allfeat$rank_pmid,
+    cex=0.5)  
+  
+
+  plot(
+    (allfeat$family_founder_rank),  #super clear ... but could be an age effect
+    allfeat$rank_pmid,
+    cex=0.5)  
+
+  plot(
+    (allfeat$family_indexdiff)+runif(nrow(allfeat),0,0.2),   #can't say that much
+    allfeat$rank_pmid,
+    cex=0.5)  
+  
+
+  plot(
+    rank(allfeat$coexp10),   #yup, a trend. better if using rank .. maybe
+    allfeat$rank_pmid,
+    cex=0.5)  
+  
+  plot(
+    rank(allfeat$ppi),   #meah.
+    allfeat$rank_pmid,
+    cex=0.5)  
+  
+}
+
 
 if(FALSE){
   #thecor <- cor(allfeat_red)
@@ -174,6 +294,47 @@ plot_staple_coef_multi(list(foo=thelm))
 
 get_lm_relweights(thelm)
 get_lm_weights(thelm)
+
+
+### Plot time vs weight used
+# 
+# plot(
+#   allfeat_meta$orig_year,
+#   allfeat_red$first_year*thelm$coefficients["first_year"]
+# )
+# 
+# plot(
+#   allfeat_meta$orig_year,
+#   allfeat_red$rank_exp*thelm$coefficients["rank_exp"]
+# )
+# 
+# plot(
+#   allfeat_meta$orig_year,
+#   allfeat_red$essentiality_global*thelm$coefficients["essentiality_global"]
+# )
+# 
+# plot(
+#   allfeat_meta$orig_year,
+#   allfeat_red$rank_cosmic*thelm$coefficients["rank_cosmic"]
+# )
+# 
+# plot(
+#   allfeat_meta$orig_year,
+#   allfeat_red$family_founder_rank*thelm$coefficients["family_founder_rank"]
+# )
+# 
+# plot(
+#   allfeat_meta$orig_year,
+#   allfeat_red$founder_fitted_pmid#*thelm$coefficients["founder_fitted_pmid"]
+# )
+
+#density(allfeat_meta$orig_year, allfeat_red$family_founder_rank*thelm$coefficients["family_founder_rank"])
+
+allfeat_redmeta <- allfeat_red #$orig_year
+allfeat_redmeta$orig_year <- allfeat_meta$orig_year
+ggplot(allfeat_redmeta, aes(orig_year,founder_fitted_pmid)) + geom_point() + geom_smooth()
+ggplot(allfeat_redmeta, aes(orig_year,rank_cosmic)) + geom_point() + geom_smooth()
+ggplot(allfeat_redmeta, aes(orig_year,essentiality_global)) + geom_point() + geom_smooth()
 
 
 if(FALSE){
@@ -232,7 +393,68 @@ if(FALSE){
 # first_year     family_indexdiff  family_founder_rank          rank_cosmic            rank_gwas 
 # -0.59176             -0.08730              0.16013              0.02263             -0.02824 
 
+#############################################################
+############## Fitted founder ###############################
+#############################################################
 
+
+##If we do this then it need to be done on all features to be fair. better not get into this!
+if(FALSE){
+
+  
+  ## First fit everything
+  thelm_nof  <- fit_lm_nofounder(allfeat_red)
+  
+  
+  
+  ## Take predicted pmid, plug into those that have it as founder
+  # founder_fit <- data.frame(
+  #   founder_name=allfeat_meta$gene,
+  #   fitted_pmid=thelm_nof$fitted.values
+  # )
+  # founder_fit <- sqldf("select founder_name, avg(fitted_pmid) as fitted_pmid from founder_fit group by founder_name")
+  # rownames(founder_fit) <- founder_fit$founder_name
+  
+  ## Predicted pmid too aggresive. should just compensate by removing all other factors from it
+  founder_fit <- data.frame(
+    founder_name=allfeat_meta$gene,
+    fitted_pmid=allfeat_red$rank_pmid - thelm_nof$fitted.values
+  )
+  founder_fit <- sqldf("select founder_name, avg(fitted_pmid) as fitted_pmid from founder_fit group by founder_name")
+  rownames(founder_fit) <- founder_fit$founder_name
+  
+  
+  ## Create fitted founder
+  allfeat_red$founder_fitted_pmid <- founder_fit[allfeat$gene,]$fitted_pmid
+  #mean(is.na(allfeat$founder_fitted_pmid))
+  allfeat_meta$is_founder <- allfeat$family_indexdiff==min(allfeat$family_indexdiff)   #hack
+  allfeat_red$founder_fitted_pmid[allfeat_red$is_founder] <- NA
+  allfeat_red$founder_fitted_pmid[!allfeat_meta$has_founder] <- NA
+  
+  
+  ##Fill in the NAs for those without a founder
+  allfeat_red$founder_fitted_pmid[is.na(allfeat_red$founder_fitted_pmid)] <- mean(allfeat_red$founder_fitted_pmid, na.rm=TRUE)
+  
+  
+  thelm_fittedf <- lm(
+    rank_pmid ~ rank_exp + coexp10 +   ppi + 
+      nearby_pmid +
+      essentiality_global +
+      first_year + 
+      founder_fitted_pmid +
+      family_indexdiff +
+      rank_cosmic + 
+      rank_gwas + homology_pmid, 
+    allfeat_red)
+  
+  plot_staple_coef_multi(list(
+    nof=thelm_nof,
+    ff=thelm_fittedf))
+  #plot_staple_coef_multi(list(foo=thelm_nof))
+  
+
+    
+}
 
 
 
@@ -242,8 +464,8 @@ if(FALSE){
 
 
 ############# Early genes vs late genes
-thelm_early <- fit_lm(allfeat_red[allfeat_meta$orig_year>=1970 & allfeat_meta$orig_year<2000,])
-thelm_late  <- fit_lm(allfeat_red[allfeat_meta$orig_year>=2000 & allfeat_meta$orig_year<2020,])
+thelm_early <- fit_lm(allfeat_red[allfeat_meta$orig_year>=1970 & allfeat_meta$orig_year<1996,])
+thelm_late  <- fit_lm(allfeat_red[allfeat_meta$orig_year>=1996 & allfeat_meta$orig_year<2020,])
 plot_staple_coef_multi(list(
   early=thelm_early,
   late=thelm_late

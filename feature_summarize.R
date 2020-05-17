@@ -39,25 +39,28 @@ rank_nogap <- function(x){
   nux$new_ind[order(nux$orig_ind)]
 }
 
+#############################################################
+## Function: Rank a column within each cell type (column ct)
+apply_by_ct <- function(dat, col, func){
+  for(ct in unique(dat$ct)){
+    dat[dat$ct==ct,col] <- func(dat[dat$ct==ct,col])
+  }
+  dat[,col]
+}
+
+#############################################################
+##
+log10_plus_1 <- function(x) log10(x+1)
+
+transform_pmid_count <- log10_plus_1
 
 #############################################################
 ## Function: Rank a column within each cell type (column ct)
 rank_by_ct <- function(dat, col){
-  for(ct in unique(dat$ct)){
-    #x <- dat[dat$ct==ct,col]
-
-    #fp <- fitdist(x, "pareto")
-    #px <- dinvpareto(x, shape = fp$estimate[1], scale = fp$estimate[2], log = FALSE)
-    #dat[dat$ct==ct,col] <- 
-    
-    #dat[dat$ct==ct,col] <- (dat[dat$ct==ct,col])
-    #dat[dat$ct==ct,col] <- rank_nogap(dat[dat$ct==ct,col])
-    #dat[dat$ct==ct,col] <- rank(dat[dat$ct==ct,col])
-
-    
-  }
-  rank(dat[,col])
+  apply_by_ct(dat, col, rank)
 }
+
+
 
 if(FALSE){
   feature_pmidcount$rank_pmid <- rank_by_ct(feature_pmidcount, "pmid_count")
@@ -147,7 +150,7 @@ calc_neigh_pmid <- function(graph, feature_pmidcount, featurename){
   neigh_pmid <- merge(
     data.frame(
       neigh=feature_pmidcount$gene,
-      ct=feature_pmidcount$ct,
+      #ct=feature_pmidcount$ct,       ########### GLOBAL, NO CT
       neigh_rank_pmid=feature_pmidcount$rank_pmid
     ),
     data.frame(
@@ -158,12 +161,15 @@ calc_neigh_pmid <- function(graph, feature_pmidcount, featurename){
   
   
   #Calculate neighbour average PMID
-  neigh_pmid <- sqldf("select gene, ct,  avg(neigh_rank_pmid) as neigh_pmid from neigh_pmid group by gene,ct")
+  #neigh_pmid <- sqldf("select gene, ct,  avg(neigh_rank_pmid) as neigh_pmid from neigh_pmid group by gene,ct")
+  neigh_pmid <- sqldf("select gene, avg(neigh_rank_pmid) as neigh_pmid, count(neigh_rank_pmid) as count_neigh from neigh_pmid group by gene")
+  
+  neigh_pmid$neigh_pmid <- neigh_pmid$neigh_pmid * sqrt(neigh_pmid$count_neigh)
   
   #Rename new feature
   colnames(neigh_pmid)[colnames(neigh_pmid)=="neigh_pmid"] <- featurename
   
-  neigh_pmid
+  neigh_pmid[,c("gene",featurename)]
 }
 
 
@@ -249,7 +255,7 @@ if(file.exists("features/keywords_pmids.csv")){
 
 ### Calculate #paper / gene
 ranked_pmid_ct_gene <- merge(pmid_term, g2phm_genespresent)
-feature_pmidcount_ct <- sqldf("select gene, count(pmid) as pmid_count from ranked_pmid_ct_gene group by gene, ct")
+feature_pmidcount_ct <- sqldf("select gene, ct, count(pmid) as pmid_count from ranked_pmid_ct_gene group by gene, ct")
 
 ### Not a full matrix - some papers missed. Fill in with 0s
 if(TRUE){
@@ -260,7 +266,7 @@ if(TRUE){
 }
 
 ### Do the ranking and store
-feature_pmidcount_ct$rank_pmid <- rank_by_ct(feature_pmidcount_ct, "pmid_count")
+feature_pmidcount_ct$rank_pmid <- apply_by_ct(feature_pmidcount_ct, "pmid_count", transform_pmid_count)  
 write.csv(feature_pmidcount_ct, "features/feature_ranked_pmid_ct.csv", row.names = F)
   
 
@@ -269,10 +275,10 @@ write.csv(feature_pmidcount_ct, "features/feature_ranked_pmid_ct.csv", row.names
 #############
 
 ### Calculate #paper / ct,gene
-feature_pmidcount <- sqldf("select gene, count(pmid) as pmid_count from pmid_term group by gene")
+feature_pmidcount <- sqldf("select gene, count(pmid) as rank_pmid from g2phm_genespresent group by gene")
 
 ### Do the ranking and store
-feature_pmidcount$rank_pmid <- log10(1+feature_pmidcount$rank_pmid)
+feature_pmidcount$rank_pmid <- transform_pmid_count(feature_pmidcount$rank_pmid)
 write.csv(feature_pmidcount, "features/feature_ranked_pmid.csv", row.names = F)
 
 
@@ -375,11 +381,7 @@ if(file.exists("features/feature_geneexp.csv")) {
   ### For each cell type, find rank average expression level
   feature_exp <- NULL
   for (i in 1:nrow(tissue_celltype_count_max)){
-    
-    #i<-43
-    #i<-44  #T cell
-    #gata3 looks better in epithelial cell?
-     
+
     the_tissue <- tissue_celltype_count_max$tissue[i]
     the_ct <- tissue_celltype_count_max$ct[i]
     print(sprintf("%s -- %s" , the_tissue, the_ct))
@@ -387,23 +389,14 @@ if(file.exists("features/feature_geneexp.csv")) {
     #Extract count table for this cell type  
     #tissue_count <- count_norm_colmeans(tissue)   #if need to load on the fly
     tissue_count <- FACS_norm_arrays[[the_tissue]]
-    input <- tissue_count#[,colnames(tissue_count) %in% new_FACS_ontology$cell[new_FACS_ontology$collapsed==the_ct]]
+    input <- tissue_count[,colnames(tissue_count) %in% new_FACS_ontology$cell[new_FACS_ontology$collapsed==the_ct]]
     
-    #Normal size factor normalization  -- this might already have been done
-    # input <- normalizeDeseqByGenes(input)
-    #
-    plot(sort(colMeans(input)))#, breaks=100)
-    hist(input["Gata3",],breaks=100)
-    # 
-    # # Work on log-scale instead
-    # input <- log10(1+input)
-    
-    ### TODO size factor normalization?
+    ##### whee! accidentaly used whole tissue above
     
     feature_one_exp <- data.frame(
       gene=rownames(input),
       ct=the_ct,
-      rank_exp=rowMeans(input)   #rank(rowMeans(input))    # consider alternatives?
+      rank_exp=rank(rowMeans(input))  
     )
     
     feature_exp <- rbind(
@@ -442,70 +435,77 @@ if(file.exists("features/feature_coexp.csv")) {
     the_tissue <- tissue_celltype_count_max$tissue[i]
     the_ct <- tissue_celltype_count_max$ct[i]
     print(sprintf("%s -- %s" , the_tissue, the_ct))
-    
-    #Extract count table for this cell type  
-    #tissue_count <- FACS_norm_arrays[[the_tissue]]   
-    tissue_count <- count_norm_colmeans(sprintf("%s-counts.csv",the_tissue))
-    input <- tissue_count[,colnames(tissue_count) %in% new_FACS_ontology$cell[new_FACS_ontology$collapsed==the_ct]]
-    input <- log10(1+ input)
-    
-    #input <- input[1:100,]
-    
-    ### Reduce by PCA - later calculations become faster and much variation is removed. Should really rather use Facebook stochastic PCA
-    print("  PCA")
-    red_count <- na.omit(t(scale(t(input), scale = T, center = T)))
-    #pca.norm = prcomp(red_count)
-    pca.norm = prcomp_irlba(red_count, n = 6, retx = TRUE, center = TRUE)  #Lanczos-based PCA 
-    
-    
-    
-    calc_exp_knn <- function(k=10) {
-      print("  umap")
-      custom.settings = umap.defaults
-      custom.settings$n_neighbors = k
-      custom.settings$random_state = 666
-      umap.norm <- umap(pca.norm$x, config = custom.settings)
+
+    outfile_name <- sprintf("features/feature_coexp_part/feature_coexp_%s",the_ct)
+    if(!file.exists(outfile_name)){
+      #Extract count table for this cell type  
+      #tissue_count <- FACS_norm_arrays[[the_tissue]]   
+      tissue_count <- count_norm_colmeans(sprintf("%s-counts.csv",the_tissue))
+      input <- tissue_count[,colnames(tissue_count) %in% new_FACS_ontology$cell[new_FACS_ontology$collapsed==the_ct]]
+      input <- log10(1+ input)
       
-      rownames(umap.norm$layout) <- rownames(red_count)
-      write.csv(umap.norm$layout, file = sprintf("plots/data_umap_coexp_k%s_%s.csv", k, the_ct))
+      #input <- input[1:100,]
       
-      ## Extract neighbour graph
-      gene_names <- rownames(red_count)
-      knn_named <- data.frame(
-        from=rep(gene_names,ncol(umap.norm$knn$indexes)),
-        to=gene_names[as.integer(umap.norm$knn$indexes)]
-      )
-      knn_named
-    }  
-    
-    # Generate k-NN neighbour graph 
-    calc_exp_knn_tsne <- function(k=20) {
-      ### Reduce by tSNE 
-      print("  tSNE")
-      set.seed(666) #for reproducibility
-      tsne.norm = Rtsne(pca.norm$x[,1:6], pca = FALSE, check_duplicates = F, perplexity = 100)
-      nonlin_red <- tsne.norm$Y
+      ### Reduce by PCA - later calculations become faster and much variation is removed. Should really rather use Facebook stochastic PCA
+      print("  PCA")
+      red_count <- na.omit(t(scale(t(input), scale = T, center = T)))
+      print(dim_redcount)
+      #pca.norm = prcomp(red_count)
+      pca.norm = prcomp_irlba(red_count, n = 6, retx = TRUE, center = TRUE)  #Lanczos-based PCA 
       
-      #separate kNN
-      knn.norm = get.knn(as.matrix(nonlin_red), k = k)
-      knn.norm = data.frame(from = rep(1:nrow(knn.norm$nn.index),
-                                       k), to = as.vector(knn.norm$nn.index), weight = 1/(1 + as.vector(knn.norm$nn.dist)))
-      knn_named <- data.frame(
-        from=rownames(red_count)[knn.norm$from],
-        to=rownames(red_count)[knn.norm$to]
-      )
-      knn_named
+      
+      
+      calc_exp_knn <- function(k=10) {
+        print("  umap")
+        custom.settings = umap.defaults
+        custom.settings$n_neighbors = k
+        custom.settings$random_state = 666
+        umap.norm <- umap(pca.norm$x, config = custom.settings)
+        
+        rownames(umap.norm$layout) <- rownames(red_count)
+        write.csv(umap.norm$layout, file = sprintf("plots/data_umap_coexp_k%s_%s.csv", k, the_ct))
+        
+        ## Extract neighbour graph
+        gene_names <- rownames(red_count)
+        knn_named <- data.frame(
+          from=rep(gene_names,ncol(umap.norm$knn$indexes)),
+          to=gene_names[as.integer(umap.norm$knn$indexes)]
+        )
+        knn_named
+      }  
+      
+      # Generate k-NN neighbour graph 
+      calc_exp_knn_tsne <- function(k=20) {
+        ### Reduce by tSNE 
+        print("  tSNE")
+        set.seed(666) #for reproducibility
+        tsne.norm = Rtsne(pca.norm$x[,1:6], pca = FALSE, check_duplicates = F, perplexity = 100)
+        nonlin_red <- tsne.norm$Y
+        
+        #separate kNN
+        knn.norm = get.knn(as.matrix(nonlin_red), k = k)
+        knn.norm = data.frame(from = rep(1:nrow(knn.norm$nn.index),
+                                         k), to = as.vector(knn.norm$nn.index), weight = 1/(1 + as.vector(knn.norm$nn.dist)))
+        knn_named <- data.frame(
+          from=rownames(red_count)[knn.norm$from],
+          to=rownames(red_count)[knn.norm$to]
+        )
+        knn_named
+      }
+      
+      ### Generate feature: Co-expression neighbour #PMID  (for this cell type)
+      k <- 10
+      the_graph <- calc_exp_knn(k)
+      feature_one_coexp <- calc_neigh_pmid(the_graph, feature_pmidcount, sprintf("coexp%d",k))
+      feature_one_coexp$ct <- the_ct
+      #feature_one_coexp <- calc_neigh_pmid(the_graph, feature_pmidcount[feature_pmidcount$ct==the_ct,], sprintf("coexp%d",k))
+      
+      ### Write one result at a time to handle potential crashes
+      write.csv(
+        feature_one_coexp[,c("gene","ct","coexp10")], 
+        outfile_name, row.names = FALSE)
     }
-    
-    ### Generate feature: Co-expression neighbour #PMID  (for this cell type)
-    k <- 10
-    the_graph <- calc_exp_knn(k)
-    feature_one_coexp <- calc_neigh_pmid(the_graph, feature_pmidcount[feature_pmidcount$ct==the_ct,], sprintf("coexp%d",k))
-    
-    ### Write one result at a time to handle potential crashes
-    write.csv(
-      feature_one_coexp[,c("gene","ct","coexp10")], 
-      sprintf("features/feature_coexp_part/feature_coexp_%s",the_ct), row.names = FALSE)
+        
   }
   
   
@@ -586,7 +586,7 @@ extract_gene_version <- function(s) {
 consider_chrom <- c(1:19, "X","Y")
 
 ### Compute gene midpoints   -- mistake, bad name, reused later
-feature_chromloc <- data.frame(
+dat_chromloc <- data.frame(
   chrom=gtf$V1,
   pos  = (gtf$V4 + gtf$V5)/2,
   gene = unname(sapply(gtf$V9, extract_genename)),
@@ -596,19 +596,19 @@ feature_chromloc <- data.frame(
 )
 
 ### Filter out earlier gene versions
-feature_chromloc <- merge(feature_chromloc,sqldf("select gene, max(genever) as genever from feature_chromloc group by gene"))
+dat_chromloc <- merge(dat_chromloc,sqldf("select gene, max(genever) as genever from feature_chromloc group by gene"))
 
 ### Filter out weird gene symbols and chromosomes
-feature_chromloc <- unique(feature_chromloc[feature_chromloc$gene %in% feature_pmidcount$gene & feature_chromloc$chrom %in% consider_chrom, ])
+dat_chromloc <- unique(dat_chromloc[dat_chromloc$gene %in% dat_chromloc$gene & dat_chromloc$chrom %in% consider_chrom, ])
 
 #Crucial ordering for later
-feature_chromloc <- feature_chromloc[order(feature_chromloc$pos),]
+dat_chromloc <- dat_chromloc[order(dat_chromloc$pos),]
 
 
 ###########################################
 ## Prepare coordinates for website
 coord_chrom <- merge(
-  feature_chromloc,
+  dat_chromloc,
   data.frame(
     chrom=consider_chrom, 
     y=1:length(consider_chrom)
@@ -658,22 +658,14 @@ calc_nearby_pmid <- function(dat, nearby_range=2){
 # cor(datchrom$rank_pmid, datchrom$nearby_pmid)#, method = "spearman")
 
 #### Link location - #PMID
-dat <- merge(feature_chromloc, feature_pmidcount)
+dat <- merge(dat_chromloc, feature_pmidcount)
 
-#### Calculate neighbour #PMID, for all cell types (need to do one ct at a time)
-datchrom_all <- NULL
-for(ct in unique(dat$ct)){
-  print(ct)
-  dat_for_ct <- dat[dat$ct==ct,]
-  neigh_for_ct <- calc_nearby_pmid(dat_for_ct)
-  datchrom_all <- rbind(
-    datchrom_all,
-    neigh_for_ct)  
-}
+#### Calculate neighbour #PMID, for all celltypes (not anymore for global)
+datchrom_all <- calc_nearby_pmid(dat)
 
 
 #### Generate feature: Chromatin structure #PMID
-feature_chromloc <- datchrom_all[,c("gene","ct","nearby_pmid")]
+feature_chromloc <- datchrom_all[,c("gene","nearby_pmid")]
 length(unique(feature_chromloc$gene))
 
 nrow((feature_chromloc))
@@ -741,7 +733,7 @@ graph_homology <- read.csv("homology/homology_graph.red.csv")[,c("from","to")]
 
 ## Generate feature: homology neighbour #PMID
 feature_homology_pmid <- calc_neigh_pmid(graph_homology, feature_pmidcount, "homology_pmid")
-feature_homology_pmid <- feature_homology_pmid[,c("gene","ct","homology_pmid")]
+feature_homology_pmid <- feature_homology_pmid[,c("gene","homology_pmid")]   #ct
 
 write.csv(
   feature_homology_pmid, 
@@ -797,7 +789,7 @@ colnames(huri_symbol) <- c("from","to")
 ### Generate feature: PMID of PPI neighbours
 feature_ppi <- calc_neigh_pmid(huri_symbol, feature_pmidcount, "ppi")  ################ TODO - normalize by the number of neighbours? *sqrt(n)?
 
-feature_ppi <- feature_ppi[,c("gene","ct","ppi")]
+feature_ppi <- feature_ppi[,c("gene","ppi")]  #ct
 write.csv(
   feature_ppi, 
   "features/feature_ppi.csv", row.names = FALSE)
@@ -835,47 +827,160 @@ map_human_mouse_sym <- map_human_mouse_sym[map_human_mouse_sym$mouse_symbol %in%
 dat_gwas <- read.csv("input/gwas/gwas_catalog_v1.0-associations_e98_r2020-03-08.tsv",sep="\t", stringsAsFactors = FALSE, quote = "")
 #dat_gwas <- read.csv("input/gwas/temp.csv",sep="\t", stringsAsFactors = FALSE)[1:500,]
 
-## Figure out which mouse genes are annotated on each row
-v <- str_split_fixed(dat_gwas$REPORTED.GENE.S.,pattern = ",", 10)
-rownames(v) <- sprintf("row_%s",1:nrow(dat_gwas))
-v <- melt(v)[,c(1,3)]
-colnames(v) <- c("row","human_symbol")
-map_row_sym <- unique(merge(v, map_human_mouse_sym)[,c("row","mouse_symbol")])
+calc_gwas_score <- function(dat_gwas){
 
-## Associate metadata to gene
-dat_gwas_clean <- merge(
-  map_row_sym,
-  data.frame(
-    row=sprintf("row_%s",1:nrow(dat_gwas)),
-    pval=dat_gwas$P.VALUE,
-    intergenic=dat_gwas$INTERGENIC
+  ## Figure out which mouse genes are annotated on each row
+  v <- str_split_fixed(dat_gwas$REPORTED.GENE.S.,pattern = ",", 10)
+  rownames(v) <- sprintf("row_%s",1:nrow(dat_gwas))
+  v <- melt(v)[,c(1,3)]
+  colnames(v) <- c("row","human_symbol")
+  map_row_sym <- unique(merge(v, map_human_mouse_sym)[,c("row","mouse_symbol")])
+  
+  ## Associate metadata to gene
+  dat_gwas_clean <- merge(
+    map_row_sym,
+    data.frame(
+      row=sprintf("row_%s",1:nrow(dat_gwas)),
+      pval=dat_gwas$P.VALUE,
+      intergenic=dat_gwas$INTERGENIC
+    )
   )
-)
+  
+  ## Ignore intergenic
+  dat_gwas_clean <- dat_gwas_clean[dat_gwas_clean$intergenic==0,]
+  
+  ## Aggregate p-values ... take smallest
+  dat_gwas_agg <- sqldf("select distinct mouse_symbol as gene, min(pval) as gwas_pval from dat_gwas_clean group by gene")
+  
+  ## How do we normalize? 
+  #hist(qnorm(dat_gwas_agg$gwas_pval),breaks = 100) 
+  #hist(rank(log10(dat_gwas_agg$gwas_pval)))
+  
+  ## Generate and store feature
+  feature_gwas <- data.frame(
+    gene=dat_gwas_agg$gene,
+    rank_gwas=qnorm(dat_gwas_agg$gwas_pval)    #superior way. most important genes are negative
+    #  rank_gwas=rank(log10(dat_gwas_agg$gwas_pval))
+  )
+  feature_gwas <- feature_gwas[!is.na(feature_gwas$rank_gwas),]
+  feature_gwas$rank_gwas[is.infinite(feature_gwas$rank_gwas)] <- -40   ## fix, cannot go lower in probability
+  
+  #Just way more linear correlation
+  feature_gwas$rank_gwas <- rank(-feature_gwas$rank_gwas)
+  
+  #feature_gwas$rank_gwas[feature_gwas$rank_gwas < -15] <- -15  ## quick hack, to binarize it
+  
+  feature_gwas
+}
 
-## Ignore intergenic
-dat_gwas_clean <- dat_gwas_clean[dat_gwas_clean$intergenic==0,]
+gwas_f_all <- calc_gwas_score(dat_gwas)
+gwas_f_spec <- calc_gwas_score(dat_gwas[dat_gwas$STUDY=="The Allelic Landscape of Human Blood Cell Trait Variation and Links to Common Complex Disease.", ,drop=FALSE])
+colnames(gwas_f_spec) <- c("gene","rank_gwas_1")
 
-## Aggregate p-values ... take smallest
-dat_gwas_agg <- sqldf("select distinct mouse_symbol as gene, min(pval) as gwas_pval from dat_gwas_clean group by gene")
-
-## How do we normalize? 
-#hist(qnorm(dat_gwas_agg$gwas_pval),breaks = 100) 
-#hist(rank(log10(dat_gwas_agg$gwas_pval)))
-
-## Generate and store feaure
-feature_gwas <- data.frame(
-  gene=dat_gwas_agg$gene,
-  rank_gwas=qnorm(dat_gwas_agg$gwas_pval)    #superior way. most important genes are negative
-#  rank_gwas=rank(log10(dat_gwas_agg$gwas_pval))
-)
-feature_gwas <- feature_gwas[!is.na(feature_gwas$rank_gwas),]
-feature_gwas$rank_gwas[is.infinite(feature_gwas$rank_gwas)] <- -40   ## fix, cannot go lower in probability
-
-#feature_gwas$rank_gwas[feature_gwas$rank_gwas < -15] <- -15  ## quick hack, to binarize it
-
+feature_gwas <-merge(gwas_f_all, gwas_f_spec)
+  
 write.csv(
   feature_gwas, 
   "features/feature_gwas.csv", row.names = FALSE)
+
+
+
+#consider_gwas <- "The Allelic Landscape of Human Blood Cell Trait Variation and Links to Common Complex Disease."
+
+
+############# figure out the source
+if(FALSE){
+  
+  #How many studies and how many contributions?
+  v1 <- as.data.frame(sort(table(dat_gwas$STUDY),decreasing = TRUE))
+  
+  #In each study, how many of the top genes are they contributing?
+
+  ## Associate metadata to gene
+  dat_gwas_full <- merge(
+    map_row_sym,
+    data.frame(
+      row=sprintf("row_%s",1:nrow(dat_gwas)),
+      pval=dat_gwas$P.VALUE,
+      intergenic=dat_gwas$INTERGENIC,
+      study=dat_gwas$STUDY
+    )
+  )
+  
+  ## Ignore intergenic
+  dat_gwas_full <- dat_gwas_full[dat_gwas_full$intergenic==0,]
+  
+  ## Aggregate p-values ... take smallest
+  minp <- sqldf("select distinct mouse_symbol, min(pval) as pval from dat_gwas_full group by mouse_symbol")
+  #dim(minp)
+  
+  dat_gwas_full <- merge(minp, dat_gwas_full)    
+  
+  v2 <- as.data.frame(sort(table(dat_gwas_full$study),decreasing = TRUE))
+
+  colnames(v1) <- c("study","numgenesoverall")  
+  colnames(v2) <- c("study","peakgenes")  
+  v12 <- merge(v1,v2)
+  plot(log10(v12$numgenesoverall), log10(v12$peakgenes))  
+  v2[1:10,]
+  sum(v2$peakgenes)
+}
+
+if(FALSE){
+  
+  ################ Compare each GWAS 
+  
+  ## Associate metadata to gene
+  dat_gwas_full <- merge(
+    map_row_sym,
+    data.frame(
+      row=sprintf("row_%s",1:nrow(dat_gwas)),
+      pval=dat_gwas$P.VALUE,
+      intergenic=dat_gwas$INTERGENIC,
+      study=dat_gwas$STUDY
+    )
+  )
+  
+  ## Ignore intergenic
+  dat_gwas_full <- dat_gwas_full[dat_gwas_full$intergenic==0,]
+
+  dat_gwas_full <- unique(dat_gwas_full[,c("mouse_symbol","pval","study")]) 
+  minp <- sqldf("select distinct mouse_symbol, study, min(pval) as pval from dat_gwas_full group by mouse_symbol,study")
+  dat_gwas_full <- merge(dat_gwas_full, minp)  
+  dat_gwas_full$study <- as.character(dat_gwas_full$study)
+  
+  #study_size <- as.data.frame(sort(table(dat_gwas_full$study),decreasing = TRUE))
+  consider_study <- names(sort(table(dat_gwas_full$study),decreasing = TRUE)[1:300])  #TRUE
+  dat_gwas_red <- dat_gwas_full[dat_gwas_full$study %in% consider_study,]
+
+  mat <- cast(dat_gwas_red, mouse_symbol ~ study, value = "pval")  #fill=1
+  rownames(mat) <- mat$mouse_symbol
+  mat <- mat[,-1]
+  apply(mat!=1,2,sum)
+  mat <- mat[,order(apply(!is.na(mat),2,sum),decreasing = TRUE)]
+#  mat <- mat[,order(apply(mat!=1,2,sum),decreasing = TRUE)]
+  for(i in 1:ncol(mat)){
+    mat[,i] <- rank(mat[,i])
+  }
+
+
+  #dim(mat)
+  #mat <- apply(mat,2,rank)
+
+  mat2 <- feature_pmidcount
+  rownames(mat2) <- feature_pmidcount$gene
+  mat2 <- mat2[rownames(mat),]$rank_pmid
+
+  thecor <- data.frame(
+    cor=cor(mat, mat2),
+    study=colnames(mat)
+  )
+  #thecor <- thecor[order(thecor$cor),]
+  thecor
+
+  plot(thecor$cor)
+
+}
 
 
 #############################################################
@@ -980,20 +1085,17 @@ write.csv(
 
 
 #############################################################
-##############  Feature for gene family index    ############
+##############  Feature for gene family index    ############       
 #############################################################
 
 
-### Get merge first the celltype pmid and the g2phm_genespresent
-pmid_term <- read.csv("features/keywords_pmids.csv",stringsAsFactors = FALSE)[,-1]
-colnames(pmid_term) <- c("ct","pmid")
-genes_ct_pmid <- merge(pmid_term, g2phm_genespresent)
 
 ### Get the ranked PMIDs for each cell type
 feature_pmidcount <- read.csv("features/feature_ranked_pmid.csv", stringsAsFactors=FALSE)
 
 ### Split gene names
-uniques_g2phm_symbols<- unique(genes_ct_pmid$gene)
+#genes_ct_pmid <- g2phm_genespresent
+uniques_g2phm_symbols<- unique(g2phm_genespresent$gene)
 genefam<- data.frame(
   gene = uniques_g2phm_symbols,
   letters=str_extract(uniques_g2phm_symbols, "[a-zA-Z]*"), #letters until first number
@@ -1006,7 +1108,7 @@ genefam <- genefam[genefam$gene==sprintf("%s%s", genefam$letters, genefam$number
 
 ### Get the founder - the gene with the smallest number in each family
 genefam_founder <- merge(feature_pmidcount, genefam)
-genefam_min_index <- sqldf("select distinct ct, letters, min(`numbers`) as numbers from genefam_founder group by letters, ct")
+genefam_min_index <- sqldf("select distinct letters, min(`numbers`) as numbers, max('numbers') as fam_size from genefam_founder group by letters")
 genefam_founder <- merge(genefam_founder, genefam_min_index)
 
 gene_with_founder <- merge(
@@ -1014,10 +1116,12 @@ gene_with_founder <- merge(
     genefam,
     feature_pmidcount),
   data.frame(
-    ct=genefam_founder$ct,
+    #ct=genefam_founder$ct,
     letters=genefam_founder$letters,
     founder_rank_pmid=genefam_founder$rank_pmid,
-    founder_index=genefam_founder$numbers
+    founder_index=genefam_founder$numbers,
+    family_size=genefam_founder$fam_size,
+    founder_name=sprintf("%s%s", genefam_founder$letters, genefam_founder$numbers)
   )
 )
 gene_with_founder$number_diff <- gene_with_founder$numbers - gene_with_founder$founder_index
@@ -1028,13 +1132,15 @@ gene_with_founder <- gene_with_founder[gene_with_founder$numbers<2000,]
 ### Construct the feature
 feature_founder_rank <- data.frame(
   gene=gene_with_founder$gene,
-  ct=gene_with_founder$ct,
+  founder_name=gene_with_founder$founder_name,
+  has_founder=TRUE,
+  #ct=gene_with_founder$ct,
   family_indexdiff=gene_with_founder$number_diff,
   family_founder_rank=gene_with_founder$founder_rank_pmid
 )
 
 ### Do not keep genes which are founders
-feature_founder_rank <- feature_founder_rank[feature_founder_rank$family_indexdiff!=0,]
+#feature_founder_rank <- feature_founder_rank[feature_founder_rank$family_indexdiff!=0,]    #done in feature merging instead
 
 ### Export feature
 nrow(feature_founder_rank)
@@ -1051,22 +1157,17 @@ if(file.file.exists("features/feature_minyear_gene_ct.csv")){
   
 } else {
   
-  ### Read when a paper was published and for which cell type
-  pmid_term <- read.csv("features/keywords_pmids.csv",stringsAsFactors = F)[,-1] 
-  colnames(pmid_term)<- c("ct", "pmid")
-  
   pub_year <- read.csv("input/pubyear.csv", header=F, stringsAsFactors = F, sep="\t")[,1:2] 
   colnames(pub_year)<- c("pmid", "year")
   
   ### Merge tables
   pmids_present <- merge(g2phm_genespresent, pub_year)
-  pmids_present <- merge(pmids_present, pmid_term)
-  
+
   ### Figure out the first year for each gene and cell type
-  feature_minyear_gene_ct <- sqldf("select gene, ct, min(year) as first_year from pmids_present group by gene, ct")
+  feature_minyear_gene_ct <- sqldf("select gene, min(year) as first_year from pmids_present group by gene")
   
   ### Export feature
-  write.csv(feature_minyear_gene_ct, "features/feature_minyear_gene_ct.csv", row.names = FALSE)
+  write.csv(feature_minyear_gene_ct, "features/feature_minyear_gene_ct.csv", row.names = FALSE) #no longer call ct?
   
 }
 
@@ -1080,18 +1181,20 @@ if(file.file.exists("features/feature_minyear_gene_ct.csv")){
 
 
 
+# feature_pmidcount_ct <- read.csv("features/feature_ranked_pmid.csv", stringsAsFactors=FALSE)
+# feature_pmidcount <- within(feature_pmidcount, rm(pmid_count))
 
 
 ####### Load all the features 
 
 feature_pmidcount <- read.csv("features/feature_ranked_pmid.csv", stringsAsFactors=FALSE)
-feature_pmidcount <- within(feature_pmidcount, rm(pmid_count))
+#feature_pmidcount <- within(feature_pmidcount, rm(pmid_count))
 
 feature_exp <- read.csv("features/feature_geneexp.csv", stringsAsFactors=FALSE)
 feature_coexp <- read.csv("features/feature_coexp.csv", stringsAsFactors=FALSE)
 feature_essentiality <- read.csv("features/feature_essentiality_global.csv", stringsAsFactors=FALSE)
 feature_essentiality_ct<- read.csv("features/feature_essentiality_ct.csv", stringsAsFactors = FALSE)
-feature_chromloc <- read.csv("features/feature_chromatin.csv", stringsAsFactors=FALSE)
+feature_chromloc <- read.csv("features/feature_chromloc.csv", stringsAsFactors=FALSE) ####################### remove old feature!
 feature_ppi <- read.csv("features/feature_ppi.csv", stringsAsFactors=FALSE)
 feature_minyear_gene_ct <- read.csv("features/feature_minyear_gene_ct.csv", stringsAsFactors = FALSE)
 feature_founder_rank <- read.csv("features/feature_founder_fam_rankpmid.csv", stringsAsFactors = FALSE)
@@ -1111,7 +1214,7 @@ totfeature <- merge(totfeature, feature_essentiality_ct, all=TRUE)
 totfeature <- merge(totfeature, feature_chromloc, all=TRUE)
 totfeature <- merge(totfeature, feature_ppi, all=TRUE)
 totfeature <- merge(totfeature, feature_minyear_gene_ct, all=TRUE)
-totfeature <- merge(totfeature, feature_founder_rank, all=TRUE)
+totfeature <- merge(totfeature, feature_founder_rank[feature_founder_rank$family_indexdiff!=0,], all=TRUE)
 totfeature <- merge(totfeature, feature_cosmic, all=TRUE)
 totfeature <- merge(totfeature, feature_gwas, all=TRUE)
 totfeature <- merge(totfeature, feature_homology, all=TRUE)
@@ -1164,9 +1267,11 @@ for(cell_type in all_cell_types) {
   print(cell_type)
   
   ###### Choose one cell type to work with
+  meta_names <- c("gene","ct","founder_name","has_founder")
   allfeat <- totfeature[totfeature$ct==cell_type,]
-  allfeat_meta <- allfeat[,c("gene","ct")]
-  allfeat <- allfeat[,!(colnames(allfeat) %in% c("gene","ct"))]
+  allfeat_meta <- allfeat[,meta_names]
+  allfeat_meta$orig_year <- allfeat$first_year
+  allfeat <- allfeat[,!(colnames(allfeat) %in% meta_names)]
   #colMeans(is.na(allfeat_red))  #low is good
   nrow(allfeat)
   
@@ -1176,22 +1281,27 @@ for(cell_type in all_cell_types) {
     ###### If NA for first_year, should best use the last year. Seems more neutral
     allfeat$first_year[is.na(allfeat$first_year)] <- max(allfeat$first_year, na.rm = TRUE)
     
-    ###### If NA for founder, then there is no founder, and it better be the minimal value
-    allfeat$family_founder_rank[is.na(allfeat$family_founder_rank)] <- min(allfeat$rank_pmid, na.rm = TRUE)
+    ###### If NA for founder, then there is no founder, and it better be the maximum value
+    # Get a weird sign on founder_index_rank if using the min value instead of max
+    allfeat$family_founder_rank[is.na(allfeat$family_founder_rank)] <- max(allfeat$rank_pmid, na.rm = TRUE)
     
-    ###### PPI - if no neighboucs found, assume none exist and set it to the lowest value
+    ###### Chromatin - if no neighbours found, assume none exist and set it to the lowest value
+    allfeat$nearby_pmid[is.na(allfeat$nearby_pmid)] <- min(allfeat$nearby_pmid, na.rm = TRUE)
+    
+    ###### PPI - if no neighbours found, assume none exist and set it to the lowest value
     allfeat$ppi[is.na(allfeat$ppi)] <- min(allfeat$ppi, na.rm = TRUE)
     
     ###### COSMIC - if no mutation found then assume lowest value  (set this aleady in cosmic?)
     allfeat$rank_cosmic[is.na(allfeat$rank_cosmic)] <- min(allfeat$rank_cosmic, na.rm = TRUE)
 
-    ###### GWAS - if no mutation found then assume highest value (it is based on p-value)  (set this aleady in gwas?)
-    allfeat$rank_gwas[is.na(allfeat$rank_gwas)] <- max(allfeat$rank_gwas, na.rm = TRUE)
+    ###### GWAS - if no mutation found then assume highest value (it is based on p-value)  
+    ## (set this aleady in gwas?)!!!!
+    allfeat$rank_gwas[is.na(allfeat$rank_gwas)] <- min(allfeat$rank_gwas, na.rm = TRUE)
     
     ###### Special treatment for the family index column: Cap it. Highest value to genes with no founder
-    allfeat$family_indexdiff[is.na(allfeat$family_indexdiff)] <- min(10, na.rm = TRUE)
+    allfeat$family_indexdiff[is.na(allfeat$family_indexdiff)] <- 30
     #allfeat$family_index[allfeat$family_index>10] <- 10
-    allfeat$family_indexdiff[allfeat$family_indexdiff>10] <- 10
+    allfeat$family_indexdiff[allfeat$family_indexdiff>10] <- 30
     
     
     ###### Fill in NAs for other values
@@ -1202,15 +1312,17 @@ for(cell_type in all_cell_types) {
     #allfeat$family_indexdiff[allfeat$family_indexdiff>10] <- 10
     #sum(is.na(allfeat$rank_exp))
     #min(allfeat$rank_exp)
+
+    ### Keep the year before scaling
+    #orig_year <- allfeat$first_year
+    
     
     ### Rescale; keep the year before scaling
-    orig_year <- allfeat$first_year
     #allfeat_scaled <- as.data.frame(scale(allfeat,center = FALSE, scale = TRUE))
     allfeat_scaled <- as.data.frame(scale(allfeat))   #no longer center!
-    
+
     allfeat_final <-  data.frame(
       allfeat_meta, 
-      orig_year=orig_year, 
       allfeat_scaled)
     
     ###### Write similar object for python ML
