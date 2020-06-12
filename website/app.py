@@ -10,7 +10,7 @@ from dash.dependencies import Input, Output
 import re
 import time
 from plotly.validators.scatter.marker import SymbolValidator
-
+import math
 
 import dash_table
 
@@ -148,7 +148,7 @@ def scatterplot(celltype = '', color = '', selected_genes = [], coord_data_plot 
             ycol = "y"
 
 
-        print(selected_genes)
+        #print(selected_genes)
         coord_data_plot = coord_data_plot.dropna()
 
         raw_symbols = SymbolValidator().values
@@ -169,11 +169,15 @@ def scatterplot(celltype = '', color = '', selected_genes = [], coord_data_plot 
         marker_symbol = marker_symbols, marker=dict(size=marker_sizes)))
 
         # fig.update_layout( autosize= True)
-        for i in range(len(vlines)):
-            fig.update_layout(vline = vlines[i])
-            fig.update_layout(hline = hlines[i])
+#        for i in range(len(vlines)):
+#            fig.update_layout(vline = vlines[i])  ## 666 does not look like it will work
+#            fig.update_layout(hline = hlines[i])
 
-        fig.update_layout( autosize= False, width = 1800, height = 600)
+        fig.update_layout( autosize= False, width = 600, height = 600)
+        #fig.update_layout( autosize= False, width = 1800, height = 600)
+
+        #add hlen and vline
+        #https://github.com/plotly/plotly_express/issues/143
 
         return fig
 
@@ -212,105 +216,102 @@ feature_list = { v[0]: v[1] for v in feature_data[ ['feature_id', 'feature_long_
 # suggestions_names.extend(suggestions_ids)
 
 app.layout = html.Div([
-html.Div([
     html.Div([
         html.Div([
-        html.Label('Gene selection'), # textbox for selecting genes using ensembl id or names; all plots updates are connected to this element
-         dcc.Input(
-            id='gene-textbox',
-            type='text',
-            value='',
-#               list='list-suggested-inputs',
-            placeholder='Comma-separated list of genes to inspect',
-            style={'width': '100%', 'height': '40px'}
-        ),            # gene selection through dropdown; this will add the gene id to the textbox above
-        html.Div([
+            html.Div([
+                html.Label('Gene selection'), # textbox for selecting genes using ensembl id or names; all plots updates are connected to this element
+                dcc.Input(
+                    id='gene-textbox',
+                    type='text',
+                    value='',
+        #               list='list-suggested-inputs',
+                    placeholder='Comma-separated list of genes to inspect',
+                    style={'width': '100%', 'height': '40px'}
+                ),            # gene selection through dropdown; this will add the gene id to the textbox above
+                html.Div([
+                        dcc.Dropdown(
+                        id='genes-dropdown',
+                        value ='',
+                        options=[ {'label': genes_dropdown_options[key], 'value':key} for key in genes_dropdown_options ],
+                        placeholder='Select a gene using its name',)
+                ], id='genes-dropdown-timestamp', n_clicks_timestamp = 0),
+            ],style={'width': '25%', 'display': 'inline-block'}),
+            html.Div([
+                html.Div([html.Label(['cell type'])], style = {'display': 'block', 'width': '24%','height': '32px'} ),
                 dcc.Dropdown(
-                id='genes-dropdown',
-                value ='',
-                options=[ {'label': genes_dropdown_options[key], 'value':key} for key in genes_dropdown_options ],
-                placeholder='Select a gene using its name',)
-        ], id='genes-dropdown-timestamp', n_clicks_timestamp = 0),],
-        style={'width': '25%', 'display': 'inline-block'}),
+                    id='cell-type-selected',
+                    value= 'epithelial cell',
+                    options=[{'label': i, 'value': i} for i in celltype_list],
+                    placeholder = 'Cell type'),
+            ],style={'width': '25%', 'display': 'inline-block'}),
+            html.Div([
+                html.Div([html.Label(['coordinate'])], style = {'display': 'block', 'width': '24%','height': '32px'} ),
+                dcc.Dropdown(
+                    id='coord-id-selected',
+                    placeholder = 'coordinate',
+                    options=[{'label': i, 'value': i} for i in coordinate_list],
+                    value='coexp'),
+            ],style={'width': '25%', 'display': 'inline-block'}),
+            html.Div([
+                html.Div([html.Label(['color by'])], style = {'display': 'block', 'width': '24%','height': '32px'} ),
+                dcc.Dropdown(
+                    id='color-by-selected',
+                    placeholder = 'color by',
+                    options=[{'label': i, 'value': i} for i in feature_list],
+                    value='rank_pmid'),
+            ],style={'width': '25%', 'display': 'inline-block'}),
+        ], style={'display': 'block', 'width': '100%'}),
+        # without the following division the floating elements above will get overlapped by the plots
+        # html.Div([], style={ 'padding': '10px 5px', 'display': 'inline-block', 'width': '100%' }),
+        # hidden division with gene links to main databases;
+        # upon gene identification will become visible and present the links to the user
         html.Div([
-      #  html.Label('cell type'),
-        html.Div([html.Label(['cell type'])], style = {'display': 'block', 'width': '24%','height': '32px'} ),
-        dcc.Dropdown(
-            id='cell-type-selected',
-            value= 'epithelial cell',
-            options=[{'label': i, 'value': i} for i in celltype_list],
-            placeholder = 'Cell type'),],
-        style={'width': '25%', 'display': 'inline-block'}),
-        html.Div([
-        #html.Label('coordinate'),
-        html.Div([html.Label(['coordinate'])], style = {'display': 'block', 'width': '24%','height': '32px'} ),
-        dcc.Dropdown(
-            id='coord-id-selected',
-            placeholder = 'coordinate',
-            options=[{'label': i, 'value': i} for i in coordinate_list],
-            value='coexp'),],
-        style={'width': '25%', 'display': 'inline-block'}),
-        html.Div([
-        html.Div([html.Label(['color by'])], style = {'display': 'block', 'width': '24%','height': '32px'} ),
-        dcc.Dropdown(
-            id='color-by-selected',
-            placeholder = 'color by',
-            options=[{'label': i, 'value': i} for i in feature_list],
-            value='rank_pmid'),],
-        style={'width': '25%', 'display': 'inline-block'}),
-], style={'display': 'block', 'width': '100%'}),
-
-
-# without the following division the floating elements above will get overlapped by the plots
-# html.Div([], style={ 'padding': '10px 5px', 'display': 'inline-block', 'width': '100%' }),
-    # hidden division with gene links to main databases;
-    # upon gene identification will become visible and present the links to the user
-    html.Div([
-        html.Div([
-            html.A(['Ensembl'], id='ensembl-link', href='', target='_blank')," | ",
-            html.A(['UniProt'], id='uniprot-link', href='', target='_blank')," | ",
-            html.A(['PubMed'], id='pubmed-link', href='', target='_blank')],),
-            html.P([''])
-    ], style={ 'width': '25%', 'display': 'block', 'float':'left'}),
-
-
-    # umea university logo
-    html.Div(
-        [ html.Img(src='https://frontiersinblog.files.wordpress.com/2018/06/logo.png', style={
-                 'height': '75%',
-                 'float':'right',
-                 'padding': '10px 50px'
-            })
-        ],
-        style={
-            'width': '25%',
-            'height': '40px',
-            'display': 'inline-block',
-            'position': 'relative',
-            'float':'right',
-            'bottom': '0'
-            }
-    )
-
-], style={
-    'borderBottom': 'thin lightgrey solid',
-    'backgroundColor': 'rgb(250, 250, 250)',
-    'padding': '10px 5px',
-    'width':'100%',
-    'float':'left'
-}),
-#
-# without the following division the floating elements above will get overlapped by the plots
-#  html.Div([], style={ 'padding': '10px 5px', 'display': 'inline-block', 'width': '100%' }),
+            html.Div([
+                html.A(['Ensembl'], id='ensembl-link', href='', target='_blank')," | ",
+                html.A(['UniProt'], id='uniprot-link', href='', target='_blank')," | ",
+                html.A(['PubMed'], id='pubmed-link', href='', target='_blank')],),
+                html.P([''])
+        ], style={ 'width': '25%', 'display': 'block', 'float':'left'}),
+    
+    
+        # Logo
+        html.Div([ 
+            html.A([
+              html.Img(src=app.get_asset_url('MIMS_logo_blue.svg'), style={
+                     'height': '75%',
+                     'float':'right',
+                     'padding': '10px 50px'
+                }),
+            ], href='http://www.mims.umu.se/')
+        ],style={
+              'width': '25%',
+              'height': '40px',
+              'display': 'inline-block',
+              'position': 'relative',
+              'float':'right',
+              'bottom': '0'
+          }
+        )
+    ], style={
+        'borderBottom': 'thin lightgrey solid',
+        'backgroundColor': 'rgb(250, 250, 250)',
+        'padding': '10px 5px',
+        'width':'95%',
+        'float':'left'
+    }),
+    #
+    # without the following division the floating elements above will get overlapped by the plots
+    #  html.Div([], style={ 'padding': '10px 5px', 'display': 'inline-block', 'width': '100%' }),
     html.Div([
         dcc.Graph( id='scatter-plot', figure=scatterplot())
-        ],#),
-       style={'display': 'inline-block', 'width': '100%', 'height': '80vh', 'margin': '0 auto',
-      # style={'display': 'inline-block', 'width': '100%', 'height': '600px', 'margin': '0 auto',
-       'padding': '10px 5px'}),
     ],
-    #)
-    style={'display': 'inline-block', 'width': '100%', 'height': '80vh', 'margin': '0 auto'})
+       style={'display': 'inline-block', 'margin': '0 auto','width': '600px', 'height': '600px', 'padding': '10px 5px'}
+#       style={'display': 'inline-block', 'margin': '0 auto','width': '95%', 'height': '95%', 'padding': '10px 5px'}
+#       style={'display': 'inline-block', 'height': '80vh', 'margin': '0 auto','padding': '10px 5px'}
+      # style={'display': 'inline-block', 'width': '100%',  'margin': '0 auto','padding': '10px 5px'}
+       ),
+],style={'position': 'inline-block', 'width': '95%', 'height': '95%', 'margin': '0 auto', 'padding':'0','overflow':'hidden'})  #margin auto=center
+#],style={'display': 'inline-block', 'width': '100%', 'height': '100vh', 'margin': '0 auto'})
 
 
 ##################################################################################################################
@@ -396,7 +397,7 @@ def update_graph(selected_genes, celltype,coordid,color):
     else:
         coord_data_plot = coord_data
 
-    print(coord_data_plot)
+    #print(coord_data_plot)
 
     return scatterplot(celltype, color, selected_genes, coord_data_plot, celltype_dependence)
 #################################################################################
