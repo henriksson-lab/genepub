@@ -15,6 +15,23 @@ library(RSQLite)
 library(igraph)
 library(reshape)
 
+rank_nogap <- function(x){
+  #x <- c(1,2,2,2,2,2,5,7,4)
+  ux <- unique(x)
+  nux <- merge(
+    data.frame(
+      orig_ind=1:length(x),
+      x=x
+    ),
+    data.frame(
+      new_ind=1:length(ux),
+      x=ux
+    )
+  )
+  nux$new_ind[order(nux$orig_ind)]
+}
+
+
 #############################################################
 ## Function: Rank a column within each cell type (column ct)
 rank_by_ct <- function(dat, col){
@@ -25,7 +42,9 @@ rank_by_ct <- function(dat, col){
     #px <- dinvpareto(x, shape = fp$estimate[1], scale = fp$estimate[2], log = FALSE)
     #dat[dat$ct==ct,col] <- 
     
-    dat[dat$ct==ct,col] <- rank(dat[dat$ct==ct,col])
+    #dat[dat$ct==ct,col] <- (dat[dat$ct==ct,col])
+    dat[dat$ct==ct,col] <- rank_nogap(dat[dat$ct==ct,col])
+    #dat[dat$ct==ct,col] <- rank(dat[dat$ct==ct,col])
 
     
   }
@@ -112,6 +131,7 @@ if(file.exists("features/keywords_pmids.csv")){
   
   ### Read map: keyword - PMID
   pmid_term <- read.csv("features/keywords_pmids.csv",stringsAsFactors = FALSE)[,-1]
+  colnames(pmid_term) <- c("ct","pmid")
   
 } else {
   
@@ -135,7 +155,7 @@ if(file.exists("features/keywords_pmids.csv")){
     pmid_term <- rbind(
       pmid_term,
       data.frame(
-        term=keywords_list_for_query[i],   ############ beep. is this correct? should use collapsed type
+        ct=keywords_list_for_query[i],   ############ beep. is this correct? should use collapsed type
         pmid=tst2$ids, 
         stringsAsFactors = FALSE)
     )
@@ -158,10 +178,10 @@ if(file.exists("features/feature_ranked_pmid.csv")) {
   
   ### Calculate #paper / ct,gene
   ranked_pmid_ct_gene <- merge(pmid_term, g2phm_genespresent)
-  feature_pmidcount <- sqldf("select gene, term as ct, count(pmid) as pmid_count from ranked_pmid_ct_gene group by gene, term")
+  feature_pmidcount <- sqldf("select gene, ct, count(pmid) as pmid_count from ranked_pmid_ct_gene group by gene, ct")
   
   ### Not a full matrix - some papers missed. Fill in with 0s
-  if(FALSE){
+  if(TRUE){
     tab <- cast(feature_pmidcount,gene~ct, fill = 0, value = "pmid_count")
     feature_pmidcount <- melt(tab)
     colnames(feature_pmidcount) <- c("gene","pmid_count","ct")
@@ -816,6 +836,8 @@ feature_gwas <- data.frame(
 feature_gwas <- feature_gwas[!is.na(feature_gwas$rank_gwas),]
 feature_gwas$rank_gwas[is.infinite(feature_gwas$rank_gwas)] <- -40   ## fix, cannot go lower in probability
 
+#feature_gwas$rank_gwas[feature_gwas$rank_gwas < -15] <- -15  ## quick hack, to binarize it
+
 write.csv(
   feature_gwas, 
   "features/feature_gwas.csv", row.names = FALSE)
@@ -1082,10 +1104,14 @@ totfeature <- merge(totfeature, feature_homology, all=TRUE)
 ######## Deal with #PMID. 
 #In many cases there are on papers about a gene, so need to set to lowest rank
 #possible better is to set to 0 before ranking, for comparability
-mean(is.na(totfeature$rank_pmid))
-totfeature <- replace_feat_na_one(totfeature, "rank_pmid", min)
+#mean(is.na(totfeature$rank_pmid))
+#totfeature <- replace_feat_na_one(totfeature, "rank_pmid", min)
 #older way - nasty! skews the first_year coefficient badly over time
 #totfeature <- totfeature[!is.na(totfeature$rank_pmid),]   
+
+totfeature <- totfeature[!is.na(totfeature$rank_pmid),]   
+totfeature <- totfeature[totfeature$rank_pmid>1,]   
+
 
 sqldf("select ct, count(*) from totfeature group by ct")
 ### Too many. some cell types explode!
@@ -1131,12 +1157,30 @@ for(cell_type in all_cell_types) {
   ###### Only consider cells with enough genes
   if(nrow(allfeat)>3000){
     
-    ###### Fill in NAs for now
-    allfeat <- replace_feat_na(allfeat)
+    ###### If NA for first_year, should best use the last year. Seems more neutral
+    allfeat$first_year[is.na(allfeat$first_year)] <- max(allfeat$first_year, na.rm = TRUE)
     
-    ###### Special treatment for the family index column: Cap it
+    ###### If NA for founder, then there is no founder, and it better be the minimal value
+    allfeat$family_founder_rank[is.na(allfeat$family_founder_rank)] <- min(allfeat$rank_pmid, na.rm = TRUE)
+    
+    ###### PPI - if no neighboucs found, assume none exist and set it to the lowest value
+    allfeat$ppi[is.na(allfeat$ppi)] <- min(allfeat$ppi, na.rm = TRUE)
+    
+    ###### COSMIC - if no mutation found then assume lowest value  (set this aleady in cosmic?)
+    allfeat$rank_cosmic[is.na(allfeat$rank_cosmic)] <- min(allfeat$rank_cosmic, na.rm = TRUE)
+
+    ###### GWAS - if no mutation found then assume highest value (it is based on p-value)  (set this aleady in gwas?)
+    allfeat$rank_gwas[is.na(allfeat$rank_gwas)] <- max(allfeat$rank_gwas, na.rm = TRUE)
+    
+    ###### Special treatment for the family index column: Cap it. Highest value to genes with no founder
+    allfeat$family_indexdiff[is.na(allfeat$family_indexdiff)] <- min(10, na.rm = TRUE)
     #allfeat$family_index[allfeat$family_index>10] <- 10
     allfeat$family_indexdiff[allfeat$family_indexdiff>10] <- 10
+    
+    
+    ###### Fill in NAs for other values
+    allfeat <- replace_feat_na(allfeat)
+    
     
     ###### Special treatment for expression level: set to 0? no need
     #allfeat$family_indexdiff[allfeat$family_indexdiff>10] <- 10
@@ -1167,6 +1211,11 @@ for(cell_type in all_cell_types) {
 
 ###############################################
 ## Quality control of features
+
+
+
+hist(allfeat$rank_pmid,breaks=100)
+
 
 isfine_feature <- function(dat){
   length(unique(dat$gene))==length(dat$gene)  

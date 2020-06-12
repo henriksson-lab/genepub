@@ -306,7 +306,7 @@ app.layout = html.Div([
         html.Div([
             dcc.Graph( id='scatter-plot', figure=scatterplot())
             ],#),
-           style={'display': 'inline-block', 'width': '100%', 'height': '60%', 'margin': '0 auto',
+           style={'display': 'inline-block', 'width': '100%', 'height': '40%', 'margin': '0 auto',
           # style={'display': 'inline-block', 'width': '100%', 'height': '600px', 'margin': '0 auto',
            'padding': '10px 5px'}),
         ])
