@@ -1,8 +1,10 @@
 # 10 reasons to study a gene
 
-This is the supplementary code for the paper "10 reasons to study a gene" by Ionut Sebastian Mihai, Debojyoti Das, Gabija Maršalka and Johan Henriksson (corresponding).
+This is the supplementary code for the paper "10 reasons to study a gene" by
+Ionut Sebastian Mihai, Debojyoti Das, Gabija Maršalka and Johan Henriksson (corresponding).
 
-*Laboratory of Molecular Infection Medicine Sweden (MIMS), Umeå Centre for Microbial Research, Department of Molecular Biology, Umeå University, Umeå, Sweden*
+*Laboratory of Molecular Infection Medicine Sweden (MIMS), 
+Umeå Centre for Microbial Research, Department of Molecular Biology, Umeå University, Umeå, Sweden*
 
 ### Reproducing
 
