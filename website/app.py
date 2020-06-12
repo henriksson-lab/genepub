@@ -132,6 +132,8 @@ def parse_genes(genes_textbox):
 
 def scatterplot(celltype = '', color = '', selected_genes = [], coord_data_plot = pd.DataFrame(), celltype_dependence = False):
     # print(type(selected_genes))
+        
+    t1 = time.time()
 
     if not len(selected_genes):
         fig = {}
@@ -153,18 +155,24 @@ def scatterplot(celltype = '', color = '', selected_genes = [], coord_data_plot 
         coord_data_plot = coord_data_plot.dropna()
 
         raw_symbols = SymbolValidator().values
-        marker_symbols = [raw_symbols[109] if v in selected_genes else raw_symbols[2] for i,v in enumerate(coord_data_plot["gene"].tolist())]
+        marker_symbols = [raw_symbols[31] if v in selected_genes else raw_symbols[1] for i,v in enumerate(coord_data_plot["gene"].tolist())]
+
+        marker_sizes = [45 if v in selected_genes else 5 for i,v in enumerate(coord_data_plot["gene"].tolist())]
 
         xaxis = coord_data_plot[xcol].values.tolist()
         yaxis = coord_data_plot[ycol].values.tolist()
         markercolor = coord_data_plot[color].values.tolist()
         textvalues = coord_data_plot["gene"].values.tolist()
 
-        fig = go.Figure(go.Scatter(x = xaxis, y = yaxis, mode = "markers", marker_color = markercolor, text = textvalues, opacity = 0.5,
-        marker_symbol = marker_symbols, marker=dict(size=10,)))
+        fig = go.Figure(go.Scatter(x = xaxis, y = yaxis, mode = "markers", 
+            marker_color = markercolor, text = textvalues, opacity = 1.0,
+        marker_symbol = marker_symbols, marker=dict(size=marker_sizes)))
 
-        fig.update_layout( autosize= False, width = 1800, height = 1000)
+        fig.update_layout( autosize= True)
+        #fig.update_layout( autosize= False, width = 1800, height = 600)
 
+        t2 = time.time()
+        print(str(t2 -t1))
         return fig
 
 ##################################################################################################################
@@ -197,7 +205,7 @@ feature_data = pd.read_csv("data/feature_long_name.csv")
 feature_list = { v[0]: v[1] for v in feature_data[ ['feature_id', 'feature_long_name']].values }
 
 # suggestions_names = genes_dropdown_options
-suggestions_names = convert_ensg_to_genenames(genes_dropdown_options)
+# suggestions_names = convert_ensg_to_genenames(genes_dropdown_options)
 # suggestions_ids = convert_genenames_to_ensg(genes_dropdown_options)
 # suggestions_names.extend(suggestions_ids)
 
@@ -206,16 +214,16 @@ app.layout = html.Div([
         html.Div([
             html.Div([
             html.Label('Gene selection'), # textbox for selecting genes using ensembl id or names; all plots updates are connected to this element
-            html.Datalist(
-                id='list-suggested-inputs',
-                children=[html.Option(value=word) for word in suggestions_names]),
-            dcc.Input(
+#            html.Datalist(
+#                id='list-suggested-inputs',
+#                children=[html.Option(value=word) for word in suggestions_names]),
+             dcc.Input(
                 id='gene-textbox',
                 type='text',
                 value='',
-                list='list-suggested-inputs',
+#               list='list-suggested-inputs',
                 placeholder='Comma-separated list of genes to inspect',
-                style={'width': '100%'}
+                style={'width': '100%', 'height': '40px'}
             ),            # gene selection through dropdown; this will add the gene id to the textbox above
             html.Div([
                     dcc.Dropdown(
@@ -224,31 +232,33 @@ app.layout = html.Div([
                     options=[ {'label': genes_dropdown_options[key], 'value':key} for key in genes_dropdown_options ],
                     placeholder='Select a gene using its name',)
             ], id='genes-dropdown-timestamp', n_clicks_timestamp = 0),],
-            style={'width': '49%', 'display': 'inline-block'}),
+            style={'width': '25%', 'display': 'inline-block'}),
             html.Div([
-            html.Label('cell type'),
+          #  html.Label('cell type'),
+            html.Div([html.Label(['cell type'])], style = {'display': 'block', 'width': '24%','height': '32px'} ),
             dcc.Dropdown(
                 id='cell-type-selected',
                 value= 'epithelial cell',
                 options=[{'label': i, 'value': i} for i in celltype_list],
                 placeholder = 'Cell type'),],
-            style={'width': '49%', 'display': 'inline-block'}),
+            style={'width': '25%', 'display': 'inline-block'}),
             html.Div([
-            html.Label('coordinate'),
+            #html.Label('coordinate'),
+            html.Div([html.Label(['coordinate'])], style = {'display': 'block', 'width': '24%','height': '32px'} ),
             dcc.Dropdown(
                 id='coord-id-selected',
                 placeholder = 'coordinate',
                 options=[{'label': i, 'value': i} for i in coordinate_list],
                 value='coexp'),],
-            style={'width': '49%', 'display': 'inline-block'}),
+            style={'width': '25%', 'display': 'inline-block'}),
             html.Div([
-                html.Div([html.Label(['color by'])], style = {'display': 'block', 'width': '24%'} ),
+            html.Div([html.Label(['color by'])], style = {'display': 'block', 'width': '24%','height': '32px'} ),
             dcc.Dropdown(
                 id='color-by-selected',
                 placeholder = 'color by',
                 options=[{'label': i, 'value': i} for i in feature_list],
                 value='rank_pmid'),],
-            style={'width': '24%', 'display': 'inline-block'}),
+            style={'width': '25%', 'display': 'inline-block'}),
     ], style={'display': 'block', 'width': '100%'}),
 
 
@@ -265,23 +275,23 @@ app.layout = html.Div([
         ], style={ 'width': '25%', 'display': 'block', 'float':'left'}),
 
 
-        ## umea university logo
-        #html.Div(
-        #    [ html.Img(src='https://frontiersinblog.files.wordpress.com/2018/06/logo.png', style={
-        #             'height': '100%',
-        #             'float':'right',
-        #             'padding': '10px 50px'
-        #        })
-        #    ],
-        #    style={
-        #        'width': '25%',
-        #        'height': '40px',
-        #        'display': 'inline-block',
-        #        'position': 'relative',
-        #        'float':'left',
-        #        'bottom': '0'
-        #        }
-        #)
+        # umea university logo
+        html.Div(
+            [ html.Img(src='https://frontiersinblog.files.wordpress.com/2018/06/logo.png', style={
+                     'height': '75%',
+                     'float':'right',
+                     'padding': '10px 50px'
+                })
+            ],
+            style={
+                'width': '25%',
+                'height': '40px',
+                'display': 'inline-block',
+                'position': 'relative',
+                'float':'right',
+                'bottom': '0'
+                }
+        )
 
     ], style={
         'borderBottom': 'thin lightgrey solid',
@@ -292,35 +302,13 @@ app.layout = html.Div([
     }),
 #
 # without the following division the floating elements above will get overlapped by the plots
-#   html.Div([], style={ 'padding': '10px 5px', 'display': 'inline-block', 'width': '100%' }),
-    #
-    # html.Div([
+#  html.Div([], style={ 'padding': '10px 5px', 'display': 'inline-block', 'width': '100%' }),
         html.Div([
             dcc.Graph( id='scatter-plot', figure=scatterplot())
             ],#),
-           # style={'display': 'inline-block', 'width': '200vh', 'height': '40vh', 'margin': '0 auto',
-            style={'display': 'inline-block', 'width': '100%', 'height': '1200px', 'margin': '0 auto',
-            'padding': '10px 5px'}),
-            #'padding': '10px 5px', 'width': '100%', 'display': 'inline-block'}),
-#            ])
-
-    html.Div([], style={ 'padding': '10px 5px', 'display': 'inline-block', 'width': '100%' }),
-        # umea university logo
-        html.Div([ 
-            html.Img(src='https://frontiersinblog.files.wordpress.com/2018/06/logo.png', style={
-                     'height': '50%',
-                     'float':'right',
-                     'padding': '10px 50px'
-                })
-            ],
-            style={
-                'width': '25%',
-                'height': '25%',
-                'display': 'inline-block',
-                'position': 'relative',
-                'float':'left',
-                'bottom': '0'
-                }),
+           style={'display': 'inline-block', 'width': '100%', 'height': '60%', 'margin': '0 auto',
+          # style={'display': 'inline-block', 'width': '100%', 'height': '600px', 'margin': '0 auto',
+           'padding': '10px 5px'}),
         ])
 
 
@@ -379,10 +367,11 @@ def update_genes_dropdown(dropdown_value):
 
 def update_graph(selected_genes, celltype,coordid,color):
 
+    t1 = time.time()
     conn = sqlite3.connect("data/coord_" + coordid + ".sqlite")
     coord_data = pd.read_sql_query("SELECT * from coord", conn)
     conn.close()
-
+    
     conn = sqlite3.connect("data/totfeature.sqlite")
     celltype_data_view = pd.read_sql_query("SELECT * from feature_matrix where ct == \"" + celltype + "\"", conn)
     conn.close()
