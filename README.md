@@ -15,6 +15,8 @@ The linear model is provided in model_linear.R - it also has some rendering for 
 
 The nonlinear model fitting is done by the Jupyter notebooks: model_neuralnetwork.ipynb and model_xgboost.ipynb
 
+Many of the figures in the paper are produced by small_plots.R.
+
 ## Deployment of server
 
 In the website directory, simply run "make" (assumes you have copied required files into its data folder; this likely needs our guidance).
