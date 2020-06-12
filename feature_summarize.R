@@ -53,6 +53,8 @@ apply_by_ct <- function(dat, col, func){
 log10_plus_1 <- function(x) log10(x+1)
 
 transform_pmid_count <- log10_plus_1
+untransform_pmid_count <- function(x) 10^x-1
+
 
 #############################################################
 ## Function: Rank a column within each cell type (column ct)
@@ -92,7 +94,10 @@ store_website_coordinates <- function(name,coord) {
   colnames(map_ensmus_sym) <- c("ensmus","gene")
   
   ##Write to file
-  con <- dbConnect(SQLite(), dbname = sprintf("website/data/coord_%s.sqlite", name))
+  fname <- sprintf("website/data/coord_%s.sqlite", name)
+  if (file.exists(fname)) 
+    file.remove(fname)
+  con <- dbConnect(SQLite(), dbname = fname)
   dbWriteTable(con, "coord", merge(coord, map_ensmus_sym), overwrite=TRUE)
   dbDisconnect(con)
 }
@@ -391,8 +396,6 @@ if(file.exists("features/feature_geneexp.csv")) {
     tissue_count <- FACS_norm_arrays[[the_tissue]]
     input <- tissue_count[,colnames(tissue_count) %in% new_FACS_ontology$cell[new_FACS_ontology$collapsed==the_ct]]
     
-    ##### whee! accidentaly used whole tissue above
-    
     feature_one_exp <- data.frame(
       gene=rownames(input),
       ct=the_ct,
@@ -505,7 +508,7 @@ if(file.exists("features/feature_coexp.csv")) {
         feature_one_coexp[,c("gene","ct","coexp10")], 
         outfile_name, row.names = FALSE)
     }
-        
+    
   }
   
   
@@ -526,10 +529,12 @@ if(file.exists("features/feature_coexp.csv")) {
   
   
   ## Store umap coordinates for website
-  all_cell_typess <- unique(feature_pmidcount$ct)
+  #all_cell_types <- unique(feature_pmidcount$ct)
   all_umap_coord <- NULL
-  for(celltype in all_cell_typess){  #list.files("plots","data_umap_coexp_k10_*"
-    the_file <- sprintf("plots/data_umap_coexp_k10_%s.csv",celltype)
+  for(the_file in list.files("plots","data_umap_coexp_k10_*")){  #
+    celltype <- str_split_fixed(str_split_fixed(the_file,"_",5)[5],"\\.",2)[1]
+    
+    the_file <- sprintf("%s/%s","plots",the_file)
     
     dat <- read.csv(the_file, stringsAsFactors = FALSE)#,sep=",")[,-1]#, col.names = FALSE)  
     colnames(dat) <- c("gene",sprintf("x_%s", celltype), sprintf("y_%s", celltype))
@@ -659,6 +664,9 @@ calc_nearby_pmid <- function(dat, nearby_range=2){
 
 #### Link location - #PMID
 dat <- merge(dat_chromloc, feature_pmidcount)
+write.csv(
+  dat, 
+  "plots/data_chromloc.csv", row.names = FALSE)
 
 #### Calculate neighbour #PMID, for all celltypes (not anymore for global)
 datchrom_all <- calc_nearby_pmid(dat)
@@ -675,7 +683,7 @@ nrow(unique(feature_chromloc))
 write.csv(
   feature_chromloc, 
   "features/feature_chromloc.csv", row.names = FALSE)
-  
+
 
 
 #### Quick plotting of correlation
@@ -719,6 +727,15 @@ if(FALSE){
   
 }
 
+#############################################################
+######## Features from chromatin structure (HiC) ############
+#############################################################
+
+feature_tad <- read.csv("input/hic/mm10/mESC.Bonev_2017-raw.domains_genepairs.csv",sep="\t", stringsAsFactors = FALSE)[,c("gene","rank_tad")]
+
+head(feature_tad)
+
+
 
 #############################################################
 ###### Features from gene homology graph neighbours #########
@@ -742,7 +759,7 @@ write.csv(
 
 ## Store graph for website use
 store_website_coordinates("homology",graph_layout_to_df(graph_homology))
-  
+
 
 
 
@@ -828,7 +845,7 @@ dat_gwas <- read.csv("input/gwas/gwas_catalog_v1.0-associations_e98_r2020-03-08.
 #dat_gwas <- read.csv("input/gwas/temp.csv",sep="\t", stringsAsFactors = FALSE)[1:500,]
 
 calc_gwas_score <- function(dat_gwas){
-
+  
   ## Figure out which mouse genes are annotated on each row
   v <- str_split_fixed(dat_gwas$REPORTED.GENE.S.,pattern = ",", 10)
   rownames(v) <- sprintf("row_%s",1:nrow(dat_gwas))
@@ -875,10 +892,10 @@ calc_gwas_score <- function(dat_gwas){
 
 gwas_f_all <- calc_gwas_score(dat_gwas)
 gwas_f_spec <- calc_gwas_score(dat_gwas[dat_gwas$STUDY=="The Allelic Landscape of Human Blood Cell Trait Variation and Links to Common Complex Disease.", ,drop=FALSE])
-colnames(gwas_f_spec) <- c("gene","rank_gwas_1")
+colnames(gwas_f_spec) <- c("gene","rank_gwas_1")    ##gwas_1 is of a specific GWAS. ignore
 
 feature_gwas <-merge(gwas_f_all, gwas_f_spec)
-  
+
 write.csv(
   feature_gwas, 
   "features/feature_gwas.csv", row.names = FALSE)
@@ -895,7 +912,7 @@ if(FALSE){
   v1 <- as.data.frame(sort(table(dat_gwas$STUDY),decreasing = TRUE))
   
   #In each study, how many of the top genes are they contributing?
-
+  
   ## Associate metadata to gene
   dat_gwas_full <- merge(
     map_row_sym,
@@ -917,7 +934,7 @@ if(FALSE){
   dat_gwas_full <- merge(minp, dat_gwas_full)    
   
   v2 <- as.data.frame(sort(table(dat_gwas_full$study),decreasing = TRUE))
-
+  
   colnames(v1) <- c("study","numgenesoverall")  
   colnames(v2) <- c("study","peakgenes")  
   v12 <- merge(v1,v2)
@@ -943,7 +960,7 @@ if(FALSE){
   
   ## Ignore intergenic
   dat_gwas_full <- dat_gwas_full[dat_gwas_full$intergenic==0,]
-
+  
   dat_gwas_full <- unique(dat_gwas_full[,c("mouse_symbol","pval","study")]) 
   minp <- sqldf("select distinct mouse_symbol, study, min(pval) as pval from dat_gwas_full group by mouse_symbol,study")
   dat_gwas_full <- merge(dat_gwas_full, minp)  
@@ -952,34 +969,34 @@ if(FALSE){
   #study_size <- as.data.frame(sort(table(dat_gwas_full$study),decreasing = TRUE))
   consider_study <- names(sort(table(dat_gwas_full$study),decreasing = TRUE)[1:300])  #TRUE
   dat_gwas_red <- dat_gwas_full[dat_gwas_full$study %in% consider_study,]
-
+  
   mat <- cast(dat_gwas_red, mouse_symbol ~ study, value = "pval")  #fill=1
   rownames(mat) <- mat$mouse_symbol
   mat <- mat[,-1]
   apply(mat!=1,2,sum)
   mat <- mat[,order(apply(!is.na(mat),2,sum),decreasing = TRUE)]
-#  mat <- mat[,order(apply(mat!=1,2,sum),decreasing = TRUE)]
+  #  mat <- mat[,order(apply(mat!=1,2,sum),decreasing = TRUE)]
   for(i in 1:ncol(mat)){
     mat[,i] <- rank(mat[,i])
   }
-
-
+  
+  
   #dim(mat)
   #mat <- apply(mat,2,rank)
-
+  
   mat2 <- feature_pmidcount
   rownames(mat2) <- feature_pmidcount$gene
   mat2 <- mat2[rownames(mat),]$rank_pmid
-
+  
   thecor <- data.frame(
     cor=cor(mat, mat2),
     study=colnames(mat)
   )
   #thecor <- thecor[order(thecor$cor),]
   thecor
-
+  
   plot(thecor$cor)
-
+  
 }
 
 
@@ -1011,7 +1028,7 @@ hist(log10(1+dat_cosmic_by_gene$count/dat_cosmic_by_gene$length))
 
 feature_cosmic <- data.frame(
   gene=dat_cosmic_by_gene$mouse_symbol,
-#  rank_cosmic=log10(1+dat_cosmic_by_gene$count/dat_cosmic_by_gene$length)
+  #  rank_cosmic=log10(1+dat_cosmic_by_gene$count/dat_cosmic_by_gene$length)
   rank_cosmic=rank(dat_cosmic_by_gene$count/dat_cosmic_by_gene$length)   #better than log10
 )
 #hist(rank(dat_cosmic$count))
@@ -1162,7 +1179,7 @@ if(file.file.exists("features/feature_minyear_gene_ct.csv")){
   
   ### Merge tables
   pmids_present <- merge(g2phm_genespresent, pub_year)
-
+  
   ### Figure out the first year for each gene and cell type
   feature_minyear_gene_ct <- sqldf("select gene, min(year) as first_year from pmids_present group by gene")
   
@@ -1201,6 +1218,7 @@ feature_founder_rank <- read.csv("features/feature_founder_fam_rankpmid.csv", st
 feature_cosmic <- read.csv("features/feature_cosmic.csv", stringsAsFactors = FALSE)
 feature_gwas <- read.csv("features/feature_gwas.csv", stringsAsFactors = FALSE)
 feature_homology <- read.csv("features/feature_homology_pmid.csv", stringsAsFactors = FALSE)
+feature_tad <- read.csv("input/hic/mm10/mESC.Bonev_2017-raw.domains_genepairs.csv",sep="\t", stringsAsFactors = FALSE)[,c("gene","rank_tad")]
 
 
 
@@ -1218,6 +1236,7 @@ totfeature <- merge(totfeature, feature_founder_rank[feature_founder_rank$family
 totfeature <- merge(totfeature, feature_cosmic, all=TRUE)
 totfeature <- merge(totfeature, feature_gwas, all=TRUE)
 totfeature <- merge(totfeature, feature_homology, all=TRUE)
+totfeature <- merge(totfeature, feature_tad, all=TRUE)
 
 
 ######## Deal with #PMID. 
@@ -1277,6 +1296,9 @@ for(cell_type in all_cell_types) {
   
   ###### Only consider cells with enough genes
   if(nrow(allfeat)>3000){
+    
+    ###### transform expression
+    #allfeat$rank_exp <- log10(1+allfeat$rank_exp)
     
     ###### If NA for first_year, should best use the last year. Seems more neutral
     allfeat$first_year[is.na(allfeat$first_year)] <- max(allfeat$first_year, na.rm = TRUE)

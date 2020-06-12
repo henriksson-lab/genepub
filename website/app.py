@@ -7,8 +7,10 @@ import dash
 import dash_core_components as dcc
 import dash_html_components as html
 from dash.dependencies import Input, Output
-
+import re
 import time
+from plotly.validators.scatter.marker import SymbolValidator
+
 
 import dash_table
 
@@ -53,7 +55,14 @@ genes_dropdown_options_inv = {v: k for k, v in genes_dropdown_options.items()}
 # add genes dictionary for genes display (this is a duplicate)   .... TODO, we should not have this twice ideally.
 # Genes dict is: {"ensg":"gene symbol - long name"}
 genes_dict = pd.read_csv('data/mus_musculus_genes_dictionary.csv')
-genes_dict = { gene[1]: gene[2] + ' - ' + gene[3] for gene in genes_dict.values }
+genes_dict = { gene[1]: gene[2] for gene in genes_dict.values }
+# genes_dict = { gene[1]: gene[2] + ' - ' + gene[3] for gene in genes_dict.values }
+
+# for genename in data_genelist["Ensembl.Gene.ID"].tolist():
+#     if genename not in genes_dict:
+#         genes_dict[genename] = genename
+
+
 for g in genes_dict:
     words = []
     lines = []
@@ -67,10 +76,28 @@ for g in genes_dict:
     genes_dict[g] = '<br>'.join(lines)
 
 
+
+
 ##################################################################################################################
 # Helper functions
 ##################################################################################################################
-
+# def parse_genes(genes_textbox):
+#
+#     '''
+#     sanitizes the list of genes provided in the textbox
+#     converting it into a python array of valid ensembl genes
+#     '''
+#
+#     # split at commas and remove trailing spaces
+#     genes = [ g.strip() for g in genes_textbox.split(',') ]
+#
+#     # replace gene names with their ensembl ids
+#     genes = [ genes_dropdown_options[g] if g in genes_dropdown_options else g for g in genes ]
+#
+#     # removes mistyped and duplicate genes
+#     genes = list(set([ g for g in genes if g in genes_dictionary ]))
+#
+#     return genes
 ###################################
 def convert_genenames_to_ensg(genes):
     # replace gene names with their ensembl ids
@@ -96,150 +123,164 @@ def parse_genes(genes_textbox):
 
     # split at commas and remove trailing spaces
     genes = [ g.strip() for g in genes_textbox.split(',') ]
+    print("type"+type(genes))
     return convert_genenames_to_ensg(genes)
 
 ##################################################################################################################
 # plotting functions
 ##################################################################################################################
 
+def scatterplot(celltype = '', color = '', selected_genes = [], coord_data_plot = pd.DataFrame(), celltype_dependence = False):
+    # print(type(selected_genes))
+        
+    t1 = time.time()
 
-#######################################################
-## Heatmap plot: Gene paper count, year vs cell type ##
-#######################################################
-def plot_gene_celltype_papers(gene):
+    if not len(selected_genes):
+        fig = {}
+        return fig
+    else:
 
-    '''
-    heatmap plot of paper counts per gene and celltype;
-    x: celltype, y: year, year will be plotted from min_year (exclusive) to max_year (inclusive);
-    the provided gene should have already been sanitized
-    '''
+        selected_genes = list(selected_genes.split(","))
+        selected_genes = convert_ensg_to_genenames(selected_genes)
 
-    if len(gene)==0:
-        return {}
-        # return {'display': 'none'}
-    #{'display': 'block', 'width': '100%'}
-
-    gene = convert_ensg_to_genenames(gene)[0]
-
-    ## Get the data from the sqlite database
-    conn = sqlite3.connect("data/gene_celltype_papercount_year.sqlite")
-    df = pd.read_sql_query("SELECT * from "+gene, conn)
-    conn.close()
-    df = df.pivot(index='Var2', columns='Var1', values='value')
-    years = df.columns.values
-    celltypes = df.index.values
-    expression_matrix = df.to_numpy()
-
-    # generate heatmap using the computed expression matrix
-    fig = go.Figure(
-        layout = {
-            'title': gene,
-            'height': len(celltypes)*20 + 200, # plot height should be proportional to the number of entries
-            'yaxis': {
-                'side': 'right',
-                'autorange': 'reversed', # put first celltypes on top rather than on the bottom
-            },
-        },
-        data = go.Heatmap(
-            z = expression_matrix,
-            x = years,
-            y = celltypes,
-            colorbar = {'x': -.1},
-            showscale = False,
-        )
-    )
-
-    # fig.update_yaxes()
-
-    return fig
+        if celltype_dependence:
+            xcol = "x_" + celltype
+            ycol = "y_" + celltype
+        else:
+            xcol = "x"
+            ycol = "y"
 
 
+        print(selected_genes)
+        coord_data_plot = coord_data_plot.dropna()
 
-###########################################
-## Plot: Gene expression vs paper count  ##
-###########################################
-def plot_paper_gene_exp(genelist):
-    print(genelist, convert_ensg_to_genenames(genelist))
-    if len(genelist)==0:
-        return {}
-        # return {'display': 'none'}
+        raw_symbols = SymbolValidator().values
+        marker_symbols = [raw_symbols[31] if v in selected_genes else raw_symbols[1] for i,v in enumerate(coord_data_plot["gene"].tolist())]
 
-    conn = sqlite3.connect("data/gene_celltype_papercount.sqlite")
-    df = pd.read_sql_query("SELECT * from gene_cell_count", conn)
-    conn.close()
+        marker_sizes = [45 if v in selected_genes else 5 for i,v in enumerate(coord_data_plot["gene"].tolist())]
 
-    genes = [convert_ensg_to_genenames(genelist)[0]]
-    subplot_titles = [genename for igene, genename in enumerate(genes)]
-    fig = make_subplots(rows=len(genelist), cols=1, subplot_titles = tuple(subplot_titles))
-    for i, gene in enumerate(genes):
-        gene_mask = [ig for ig, genename in enumerate(df['gene'].values) if genename == gene]
-        dfplot = df.iloc[gene_mask,:].copy()
+        xaxis = coord_data_plot[xcol].values.tolist()
+        yaxis = coord_data_plot[ycol].values.tolist()
+        markercolor = coord_data_plot[color].values.tolist()
+        textvalues = coord_data_plot["gene"].values.tolist()
 
-        xaxis = dfplot["term"].values.tolist()
-        yaxis = dfplot["papercount"].values.tolist()
+        fig = go.Figure(go.Scatter(x = xaxis, y = yaxis, mode = "markers", 
+            marker_color = markercolor, text = textvalues, opacity = 1.0,
+        marker_symbol = marker_symbols, marker=dict(size=marker_sizes)))
 
-        fig.add_trace(go.Scatter(x=xaxis, y=yaxis))
+        fig.update_layout( autosize= True)
+        #fig.update_layout( autosize= False, width = 1800, height = 600)
 
-
-
-    return fig
-
+        t2 = time.time()
+        print(str(t2 -t1))
+        return fig
 
 ##################################################################################################################
 # starting server
 
 print("\n========= starting server =========\n")
 
-external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']  #was not there before when nico made it. needed?
+# external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']  #was not there before when nico made it. needed?
 server = flask.Flask(__name__)
 app = dash.Dash(
   __name__,
   server=server,
-  routes_pathname_prefix='/bias/',
-  external_stylesheets=external_stylesheets)
+  routes_pathname_prefix='/bias/')#,
+  # external_stylesheets=external_stylesheets)
 
 
 app.config.suppress_callback_exceptions = True ###Note, dangerous -- see if needed. used if components are added after initialization
 app.title = "Publicational bias visualization"
 
+coordinate_list_data = pd.read_csv("data/list_coordinates.csv")
+coordinate_list = {v[0]: v[1] for v in coordinate_list_data[["coord_id","coord_name"]].values}
 
-##################################################################################################################
-# page layout
+
+conn = sqlite3.connect("data/totfeature.sqlite")
+celltype_data = pd.read_sql_query("SELECT * from feature_matrix", conn)
+conn.close()
+celltype_list = celltype_data["ct"].unique()
+
+feature_data = pd.read_csv("data/feature_long_name.csv")
+feature_list = { v[0]: v[1] for v in feature_data[ ['feature_id', 'feature_long_name']].values }
+
+# suggestions_names = genes_dropdown_options
+# suggestions_names = convert_ensg_to_genenames(genes_dropdown_options)
+# suggestions_ids = convert_genenames_to_ensg(genes_dropdown_options)
+# suggestions_names.extend(suggestions_ids)
 
 app.layout = html.Div([
     html.Div([
         html.Div([
-
-            html.Label('Gene selection'),
-
-            # textbox for selecting genes using ensembl id or names;
-            # all plots updates are connected to this element
-            dcc.Input(
+            html.Div([
+            html.Label('Gene selection'), # textbox for selecting genes using ensembl id or names; all plots updates are connected to this element
+#            html.Datalist(
+#                id='list-suggested-inputs',
+#                children=[html.Option(value=word) for word in suggestions_names]),
+             dcc.Input(
                 id='gene-textbox',
                 type='text',
                 value='',
+#               list='list-suggested-inputs',
                 placeholder='Comma-separated list of genes to inspect',
-                style={'width': '100%'}
-            ),
-
-            # gene selection through dropdown; this will add the gene id to the textbox above
+                style={'width': '100%', 'height': '40px'}
+            ),            # gene selection through dropdown; this will add the gene id to the textbox above
             html.Div([
-                dcc.Dropdown(
+                    dcc.Dropdown(
                     id='genes-dropdown',
+                    value ='',
                     options=[ {'label': genes_dropdown_options[key], 'value':key} for key in genes_dropdown_options ],
-                    placeholder='Select a gene using its name',
-                )
-            ], id='genes-dropdown-timestamp', n_clicks_timestamp = 0),
+                    placeholder='Select a gene using its name',)
+            ], id='genes-dropdown-timestamp', n_clicks_timestamp = 0),],
+            style={'width': '25%', 'display': 'inline-block'}),
+            html.Div([
+          #  html.Label('cell type'),
+            html.Div([html.Label(['cell type'])], style = {'display': 'block', 'width': '24%','height': '32px'} ),
+            dcc.Dropdown(
+                id='cell-type-selected',
+                value= 'epithelial cell',
+                options=[{'label': i, 'value': i} for i in celltype_list],
+                placeholder = 'Cell type'),],
+            style={'width': '25%', 'display': 'inline-block'}),
+            html.Div([
+            #html.Label('coordinate'),
+            html.Div([html.Label(['coordinate'])], style = {'display': 'block', 'width': '24%','height': '32px'} ),
+            dcc.Dropdown(
+                id='coord-id-selected',
+                placeholder = 'coordinate',
+                options=[{'label': i, 'value': i} for i in coordinate_list],
+                value='coexp'),],
+            style={'width': '25%', 'display': 'inline-block'}),
+            html.Div([
+            html.Div([html.Label(['color by'])], style = {'display': 'block', 'width': '24%','height': '32px'} ),
+            dcc.Dropdown(
+                id='color-by-selected',
+                placeholder = 'color by',
+                options=[{'label': i, 'value': i} for i in feature_list],
+                value='rank_pmid'),],
+            style={'width': '25%', 'display': 'inline-block'}),
+    ], style={'display': 'block', 'width': '100%'}),
 
-        ],
-        style={'width': '75%', 'display': 'inline-block', 'float':'left'}),
+
+    # without the following division the floating elements above will get overlapped by the plots
+    # html.Div([], style={ 'padding': '10px 5px', 'display': 'inline-block', 'width': '100%' }),
+        # hidden division with gene links to main databases;
+        # upon gene identification will become visible and present the links to the user
+        html.Div([
+            html.Div([
+                html.A(['Ensembl'], id='ensembl-link', href='', target='_blank')," | ",
+                html.A(['UniProt'], id='uniprot-link', href='', target='_blank')," | ",
+                html.A(['PubMed'], id='pubmed-link', href='', target='_blank')],),
+                html.P([''])
+        ], style={ 'width': '25%', 'display': 'block', 'float':'left'}),
+
 
         # umea university logo
         html.Div(
             [ html.Img(src='https://frontiersinblog.files.wordpress.com/2018/06/logo.png', style={
-                     'height': '100%',
+                     'height': '75%',
                      'float':'right',
-                     'padding': '10px 30px'
+                     'padding': '10px 50px'
                 })
             ],
             style={
@@ -247,7 +288,7 @@ app.layout = html.Div([
                 'height': '40px',
                 'display': 'inline-block',
                 'position': 'relative',
-                'float':'left',
+                'float':'right',
                 'bottom': '0'
                 }
         )
@@ -259,41 +300,51 @@ app.layout = html.Div([
         'width':'100%',
         'float':'left'
     }),
-
-    # without the following division the floating elements above will get overlapped by the plots
-    html.Div([], style={ 'padding': '10px 5px', 'display': 'inline-block', 'width': '100%' }),
-
-    html.Div([
+#
+# without the following division the floating elements above will get overlapped by the plots
+#  html.Div([], style={ 'padding': '10px 5px', 'display': 'inline-block', 'width': '100%' }),
         html.Div([
-            #Plot heatmap for paper count, celltype vs year
-            dcc.Graph( id='plot-pc-year-celltype', figure=plot_gene_celltype_papers(convert_genenames_to_ensg(["Gata4"])) )
-        ], style={'display': 'block'}),
-    ], style={ 'padding': '10px 5px', 'width': '100%', 'display': 'inline-block' }),
+            dcc.Graph( id='scatter-plot', figure=scatterplot())
+            ],#),
+           style={'display': 'inline-block', 'width': '100%', 'height': '40%', 'margin': '0 auto',
+          # style={'display': 'inline-block', 'width': '100%', 'height': '600px', 'margin': '0 auto',
+           'padding': '10px 5px'}),
+        ])
 
-    html.Div([
-
-        # genes plots; initialize as hidden
-        html.Div([
-		#plot number of paper vs gene expression
-            #dcc.Graph( id='genes-plot', figure=genes_scatterplots() )
-            dcc.Graph( id='plot-paper-gene-exp', figure=plot_paper_gene_exp(convert_genenames_to_ensg(["Gata4"])))
-        ], style={'width': '100%'}, id='genes-plot-div'),
-    ], style={ 'padding': '10px 5px', 'width': '100%', 'display': 'inline-block'}),
-
-],style={'max-width': '1200px', 'margin': '0 auto'})
 
 
 ##################################################################################################################
 # page callbacks
+# test genes = ENSMUSG00000000126,ENSMUSG00000095309,ENSMUSG00000097090
+
 ##################################################################################################################
+@app.callback(
+    Output('gene-links-div', 'style'),
+    [Input('gene-textbox', 'value')])
+def update_gene_links_div(selected_genes):
 
+    '''
+    hide genes links if more than a gene is provided
+    '''
 
+    selected_genes = parse_genes(selected_genes)
+    # print("Here"+type(selected_genes))
 
+    if len(selected_genes) == 1:
+        gene_links = {'display': 'block', 'padding':'30px 0 0 30px'}
+    else:
+        gene_links = {'display': 'none', 'padding':'30px 0 0 30px'}
+    #
+    # for i,v in enumerate(genes_dict):
+    #     if i > 100:
+    #         break
+    #     else:
+    #         print(i,v, genes_dict[v])
+    return gene_links
 
+#############################
 
-
-###################################
-###################################
+################################################################################
 @app.callback(
     Output('gene-textbox', 'value'),
     [Input('genes-dropdown', 'value')])
@@ -307,52 +358,78 @@ def update_genes_dropdown(dropdown_value):
         return ''
     else:
         return dropdown_value
+###################################################
+@app.callback(Output('scatter-plot', 'figure'),
+    [Input('gene-textbox', 'value'),
+     Input('cell-type-selected', 'value'),
+     Input('coord-id-selected', 'value'),
+     Input('color-by-selected', 'value')])
+
+def update_graph(selected_genes, celltype,coordid,color):
+
+    t1 = time.time()
+    conn = sqlite3.connect("data/coord_" + coordid + ".sqlite")
+    coord_data = pd.read_sql_query("SELECT * from coord", conn)
+    conn.close()
+    
+    conn = sqlite3.connect("data/totfeature.sqlite")
+    celltype_data_view = pd.read_sql_query("SELECT * from feature_matrix where ct == \"" + celltype + "\"", conn)
+    conn.close()
+
+    #print(celltype_data_view)
+
+    # print(coord_data.head(5))
+    # selected_genes = parse_genes(selected_genes)
+    # rows2view = [i for i,v in enumerate(celltype_data["ct"].tolist()) if v == celltype]
+    # celltype_data_view = celltype_data.iloc[rows2view,:].copy()
+    coord_data = coord_data.merge(celltype_data_view,left_on = "gene", right_on = "gene", indicator = True)
+
+    #print(coord_data)
+
+    celltype_dependence_data = pd.read_csv("data/list_coordinates.csv")
+    celltype_dependence_data.index = celltype_dependence_data["coord_id"].tolist()
+    celltype_dependence = celltype_dependence_data.loc[coordid,"perct"]
 
 
-###################################
-###################################
+    if celltype_dependence:
+        coord_data_plot = coord_data.loc[:,["gene","x_"+ celltype, "y_"+ celltype, color]].copy()
+    else:
+        coord_data_plot = coord_data
+
+    print(coord_data_plot)
+
+    return scatterplot(celltype, color, selected_genes, coord_data_plot, celltype_dependence)
+#################################################################################
 @app.callback(
-    [Output('plot-pc-year-celltype', 'figure')],
-#    [Output('genes-plot', 'figure'),
-#    Output('genes-plot-div', 'style')],
+    [Output('ensembl-link', 'href'),
+    Output('uniprot-link', 'href'),
+    Output('pubmed-link', 'href')],
     [Input('gene-textbox', 'value')])
-def update_plots(selected_genes):
+def update_gene_links(gene):
 
     '''
-    plots update, triggered by genes selection
+    update gene links
     '''
 
-    selected_genes = parse_genes(selected_genes)
-    print(selected_genes)
+    gene = gene.strip()
 
-    plot_pc_year_celltype = plot_gene_celltype_papers(selected_genes)
+    links = (
+        'https://www.ensembl.org/Mus_musculus/Gene/Summary?g={}'.format(gene),
+        'https://www.uniprot.org/uniprot/?query={}&sort=score'.format(gene),
+        'https://www.ncbi.nlm.nih.gov/search/all/?term={}'.format(gene),
+    )
 
-    #return umap_plot_cells(selected_genes), genes_scatterplots(selected_genes), genes_plot
-    #return genes_scatterplots(selected_genes), genes_plot
-    return [plot_pc_year_celltype]
-
+    return links
 ###################################
-###################################
-@app.callback(
-    [Output('plot-paper-gene-exp', 'figure')],
-    [Input('gene-textbox', 'value')])
-def update_plots(selected_genes):
 
-    '''
-    plots update, triggered by genes selection
-    '''
 
-    selected_genes = parse_genes(selected_genes)
-    #print(selected_genes)
 
-    plotpaper_gene_exp = plot_paper_gene_exp(selected_genes)
-
-    return [plotpaper_gene_exp]
-
-##################################################################################################################
 # run the server
 
 # run the app on "python app.py";
 # default port: 8050
 if __name__ == '__main__':
     app.run_server(debug = True)
+
+app = dash.Dash(__name__)
+#viewer.show(app)
