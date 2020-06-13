@@ -99,6 +99,7 @@ store_website_coordinates <- function(name,coord) {
     file.remove(fname)
   con <- dbConnect(SQLite(), dbname = fname)
   dbWriteTable(con, "coord", merge(coord, map_ensmus_sym), overwrite=TRUE)
+  #print(dim())
   dbDisconnect(con)
 }
 
@@ -601,7 +602,8 @@ dat_chromloc <- data.frame(
 )
 
 ### Filter out earlier gene versions
-dat_chromloc <- merge(dat_chromloc,sqldf("select gene, max(genever) as genever from feature_chromloc group by gene"))
+dat_chromloc <- merge(dat_chromloc,sqldf("select gene, max(genever) as genever from dat_chromloc group by gene"))    #there was a bug!
+#dat_chromloc <- merge(dat_chromloc,sqldf("select gene, max(genever) as genever from feature_chromloc group by gene"))
 
 ### Filter out weird gene symbols and chromosomes
 dat_chromloc <- unique(dat_chromloc[dat_chromloc$gene %in% dat_chromloc$gene & dat_chromloc$chrom %in% consider_chrom, ])

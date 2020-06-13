@@ -143,71 +143,7 @@ def parse_genes(genes_textbox):
     return convert_genenames_to_ensg(genes)
 
 
-##################################################################################################################
-# Function: Make the scatter plot for all the genes
-##################################################################################################################
-def scatterplot(celltype = '', color = '', selected_genes = [], coord_data_plot = pd.DataFrame(), celltype_dependence = False):
-  
-    ##Check if there is any data to plot
-    #print(coord_data_plot.shape)
-    if coord_data_plot.shape[0]==0:
-        fig = go.Figure()
-        fig.update_layout( autosize= False, width = 800, height = 800)
-        return fig
 
-    ##Check if any genes should be highlighted
-    if not len(selected_genes):
-        selected_genes = []
-    else:
-        selected_genes = list(selected_genes.split(","))
-        selected_genes = convert_ensg_to_genenames(selected_genes)
-
-    #print(selected_genes)
-
-    ##Figure out the names of the coordinate columns
-    if celltype_dependence:
-        xcol = "x_" + celltype
-        ycol = "y_" + celltype
-    else:
-        xcol = "x"
-        ycol = "y"
-
-    #print(selected_genes)
-    coord_data_plot = coord_data_plot.dropna()
-
-    #X,Y coordinates of selected genes
-    vlines = [coord_data_plot[xcol].values[i] for i,v in enumerate(coord_data_plot["gene"].tolist()) if v in selected_genes]
-    hlines = [coord_data_plot[ycol].values[i] for i,v in enumerate(coord_data_plot["gene"].tolist()) if v in selected_genes]
-
-    #All X,Y coordinates, their color, and the name of the genes
-    xaxis = coord_data_plot[xcol].values.tolist()
-    yaxis = coord_data_plot[ycol].values.tolist()
-    markercolor = coord_data_plot[color].values.tolist()
-    textvalues = coord_data_plot["gene"].values.tolist()
-    
-    #Create the basic plot
-    fig = go.Figure(go.Scatter(x = xaxis, y = yaxis, mode = "markers",
-        marker_color = markercolor, text = textvalues, opacity = 1.0))
-
-    #Add cross-hairs to all the selected genes
-    shapes_y=[{'type': 'line',
-                        'y0':y_intercept,
-                        'y1':y_intercept,
-                        'x0':str(min(xaxis)), 
-                        'x1':str(max(xaxis)),
-                        'line': {'color': 'black', 'width': 1, 'dash': 'dot'}} 
-                   for i, y_intercept in enumerate(hlines)]
-    shapes_x=[{'type': 'line',
-                        'x0':x_intercept,
-                        'x1':x_intercept,
-                        'y0':str(min(yaxis)), 
-                        'y1':str(max(yaxis)),
-                        'line': {'color': 'black', 'width': 1, 'dash': 'dot'}} 
-                   for i, x_intercept in enumerate(vlines)]
-    fig.layout.update(shapes=shapes_x+shapes_y)
-        
-    fig.update_layout( autosize= False, width = 800, height = 800, margin={'t':0, 'b':0,'l':0, 'r':0})
-    return fig
 
 
 
@@ -224,9 +160,8 @@ def histogram_citationsperyear(gene_id):
         
     ##Check if there is any data to plot
     if citationsperyear.shape[0]==0:
-        #return ""
         fig = go.Figure()
-        fig.update_layout( autosize= False, width = 200, height = 100, margin={'t':0, 'b':0,'l':0, 'r':0})
+        fig.update_layout( autosize= False, width = 400, height = 100, margin={'t':0, 'b':0,'l':0, 'r':0})
         return fig
 
     ##Check if any genes should be highlighted
@@ -355,16 +290,16 @@ app.layout = html.Div([
         }, id='geneinfo-div'),
     ], style={'float':'right','width':'25%', 'padding':'20px'}),
     html.Div([
-        dcc.Graph( id='scatter-plot', figure=scatterplot())
+        dcc.Graph( id='scatter-plot')#, figure=scatterplot())
     ],style={
       'display': 'inline-block',
-      'margin': 'auto'
+      'margin': '0 auto'
     }),
 ],style={
   'position': 'inline-block', 
   'width': '95%', 
   'height': '95%', 
-  'margin': '0 auto', #supposed to center it
+  'margin': '0 auto', #supposed to center it... but meah.
   'padding':'0',
   'overflow':'hidden'
 }) 
@@ -390,7 +325,9 @@ def update_genes_dropdown(dropdown_value):
         return dropdown_value
         
         
-###################################################
+##################################################################################################################
+# Function: Make the scatter plot for all the genes
+##################################################################################################################
 @app.callback(Output('scatter-plot', 'figure'),
     [Input('gene-textbox', 'value'),
      Input('cell-type-selected', 'value'),
@@ -398,25 +335,85 @@ def update_genes_dropdown(dropdown_value):
      Input('color-by-selected', 'value')])
 def update_graph(selected_genes, celltype,coordid,color):
 
-    conn = sqlite3.connect("file:data/coord_" + coordid + ".sqlite?mode=ro", uri=True)
-    coord_data = pd.read_sql_query("SELECT * from coord", conn) #Possible to speed up but does not seem worth it
-    conn.close()
-
-    conn = sqlite3.connect("file:data/totfeature.sqlite?mode=ro", uri=True)
-    celltype_data_view = pd.read_sql_query("SELECT * from feature_matrix where ct == ?", conn, params=(celltype,))
-    conn.close()
-
-    coord_data = coord_data.merge(celltype_data_view,left_on = "gene", right_on = "gene", indicator = True)
-
+    ##Check if the coordinates are per cell type; otherwise just use the columns x,y
     celltype_dependence = celltype_dependence_data.loc[coordid,"perct"]
     if celltype_dependence:
-        coord_data_plot = coord_data.loc[:,["gene","x_"+ celltype, "y_"+ celltype, color]].copy()
+        xcoord_name = "x_"+celltype
+        ycoord_name = "y_"+celltype
     else:
-        coord_data_plot = coord_data
+        xcoord_name = "x"
+        ycoord_name = "y"
 
-    return scatterplot(celltype, color, selected_genes, coord_data_plot, celltype_dependence)
-    
-    
+    ##Load coordinates
+    conn = sqlite3.connect("file:data/coord_" + coordid + ".sqlite?mode=ro", uri=True)
+    coord_data = pd.read_sql_query("SELECT gene, `"+xcoord_name+"` as x, `"+ycoord_name+"` as y from coord", conn)
+    conn.close()
+
+    ##Load the feature we need
+    conn = sqlite3.connect("file:data/totfeature.sqlite?mode=ro", uri=True)
+    feature_data = pd.read_sql_query("SELECT gene, `"+color+"` as feature from feature_matrix where ct == ?", conn, params=(celltype,))
+    conn.close()
+
+    ##Merge coordinates and features
+    coord_data_plot = coord_data.merge(feature_data,left_on = "gene", right_on = "gene", indicator = True)
+
+    ##Check if there is any data to plot, otherwise return an empty graph
+    if coord_data_plot.shape[0]==0:
+        fig = go.Figure()
+        fig.update_layout( autosize= False, width = 800, height = 800)
+        return fig
+
+    ##Check if any genes are selected and should be highlighted
+    if not len(selected_genes):
+        selected_genes = []
+    else:
+        selected_genes = list(selected_genes.split(","))
+        selected_genes = convert_ensg_to_genenames(selected_genes)
+
+    ##Drop crappy values - usually missing features
+    coord_data_plot = coord_data_plot.dropna()
+
+    #Extract X,Y coordinates of selected genes
+    vlines = [coord_data_plot["x"].values[i] for i,v in enumerate(coord_data_plot["gene"].tolist()) if v in selected_genes]
+    hlines = [coord_data_plot["y"].values[i] for i,v in enumerate(coord_data_plot["gene"].tolist()) if v in selected_genes]
+
+    #Extarct X,Y coordinates of all genes, their feature value (color), and the name
+    xaxis = coord_data_plot["x"].values.tolist()
+    yaxis = coord_data_plot["y"].values.tolist()
+    markercolor = coord_data_plot["feature"].values.tolist()
+    textvalues = coord_data_plot["gene"].values.tolist()
+
+    #Create the basic plot
+    fig = go.Figure(
+        go.Scatter(
+            x = xaxis, 
+            y = yaxis, 
+            mode = "markers",
+            marker_color = markercolor, 
+            text = textvalues,
+            opacity = 1.0))
+
+    #Add cross-hairs to all the selected genes
+    shapes_y=[{'type': 'line',
+                        'y0':y_intercept,
+                        'y1':y_intercept,
+                        'x0':str(min(xaxis)), 
+                        'x1':str(max(xaxis)),
+                        'line': {'color': 'black', 'width': 1, 'dash': 'dot'}} 
+                   for i, y_intercept in enumerate(hlines)]
+    shapes_x=[{'type': 'line',
+                        'x0':x_intercept,
+                        'x1':x_intercept,
+                        'y0':str(min(yaxis)), 
+                        'y1':str(max(yaxis)),
+                        'line': {'color': 'black', 'width': 1, 'dash': 'dot'}} 
+                   for i, x_intercept in enumerate(vlines)]
+    fig.layout.update(shapes=shapes_x+shapes_y)
+        
+    fig.update_layout( autosize= False, width = 800, height = 800, margin={'t':0, 'b':0,'l':0, 'r':0})
+    return fig    
+
+
 
 ##################################################################################################################
 ##### Callback: Update gene information box ... links
