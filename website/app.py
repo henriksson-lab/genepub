@@ -298,9 +298,9 @@ app.layout = html.Div([
         html.Div([
           
             html.H1(html.Label(id='geneinfo-symbol')),
-            
-            html.Label(["First cited: ..."]),
-            html.Label(["#Citations: ..."]),
+            html.H4(html.Label(id='geneinfo-longname')),
+            html.Label(id="geneinfo-firstcited"),
+            html.Label(id="geneinfo-numcitations"),
 
             html.Br(),
 
@@ -386,45 +386,80 @@ def update_graph(selected_genes, celltype,coordid,color):
     return scatterplot(celltype, color, selected_genes, coord_data_plot, celltype_dependence)
     
     
-    
+
 ##################################################################################################################
 ##### Callback: Update gene information box ... links
 ##################################################################################################################
 @app.callback(
-    [Output('geneinfo-div', 'style'),
-    Output('geneinfo-symbol', 'children'),
-    Output('ensembl-link', 'href'),
-    Output('uniprot-link', 'href'),
-    Output('pubmed-link', 'href'),
-    Output('genecards-link', 'href')],
+    [
+    Output('geneinfo-div',          'style'),
+    Output('geneinfo-symbol',       'children'),
+    Output('geneinfo-longname',     'children'),
+    Output('geneinfo-firstcited',   'children'),
+    Output('geneinfo-numcitations', 'children'),
+    
+    Output('ensembl-link',   'href'),
+    Output('uniprot-link',   'href'),
+    Output('pubmed-link',    'href'),
+    Output('genecards-link', 'href')
+    ],
     [Input('gene-textbox', 'value')])  
 def update_gene_links(gene):
 
     ##hide genes links if more than a gene is provided
     selected_genes = parse_genes(gene)
+    gene_id = selected_genes
+    gene_symbol = convert_ensg_to_genenames(selected_genes)
+    geneinfo_longname=""
+    geneinfo_firstcited=""
+    geneinfo_numcitations=""
+
     if len(selected_genes) == 1:
+        gene_symbol = gene_symbol[0]
+
+        ### Make geneinfo box visible
         style= {
             'margin-top':'50px',
             'border': 'thin lightgrey solid',
             'backgroundColor': 'rgb(250, 250, 250)',
             'padding': '10px 5px',
             'width':'100%'
-        } 
+        }
+
+        ### Pull out information about the gene
+        conn = sqlite3.connect("data/geneinfo.sqlite")
+        geneinfo_data = pd.read_sql_query("SELECT * from geneinfo WHERE ensembl=?", conn, params=(gene_id[0],))
+        conn.close()
+        if geneinfo_data.shape[0]>0:
+            geneinfo_data = geneinfo_data.to_dict()
+            geneinfo_longname     = geneinfo_data["description"][0]
+            
+            if geneinfo_data["firstyear"][0]<0:
+                geneinfo_firstcited   = "First cited: N/A"
+            else:
+                geneinfo_firstcited   = "First cited: "+str(int(geneinfo_data["firstyear"][0]))
+            
+            geneinfo_numcitations = "#Citations: "+str(geneinfo_data["numcitations"][0])
+
     else:
+        gene_symbol=""
         style= {'display': 'none', 'padding':'30px 0 0 30px'}
 
-    gene_id = selected_genes
-    gene_symbol = convert_ensg_to_genenames(selected_genes)
 
     ##update gene links
     gene = gene.strip()
     info = (
         style,
+        
         gene_symbol,
+        geneinfo_longname,
+        geneinfo_firstcited,
+        geneinfo_numcitations,
+
         'https://www.ensembl.org/Mus_musculus/Gene/Summary?g={}'.format(gene),
         'https://www.uniprot.org/uniprot/?query={}&sort=score'.format(gene),
         'https://www.ncbi.nlm.nih.gov/search/all/?term={}'.format(gene),
-        'https://www.genecards.org/Search/Keyword?queryString={}'.format(gene_symbol)
+        'https://www.genecards.org/cgi-bin/carddisp.pl?gene={}&keywords={}'.format(gene_symbol,gene_symbol)
     )
 
     return info
