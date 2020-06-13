@@ -80,7 +80,7 @@ coordinate_list_data = pd.read_csv("data/list_coordinates.csv")
 coordinate_list = {v[0]: v[1] for v in coordinate_list_data[["coord_id","coord_name"]].values}
 
 ## Load cell types
-conn = sqlite3.connect("data/totfeature.sqlite")
+conn = sqlite3.connect("file:data/totfeature.sqlite?mode=ro", uri=True)
 celltype_data = pd.read_sql_query("SELECT DISTINCT ct from feature_matrix ORDER BY ct", conn) 
 celltype_list = celltype_data["ct"]
 conn.close()
@@ -206,10 +206,39 @@ def scatterplot(celltype = '', color = '', selected_genes = [], coord_data_plot 
                    for i, x_intercept in enumerate(vlines)]
     fig.layout.update(shapes=shapes_x+shapes_y)
         
-    fig.update_layout( autosize= False, width = 800, height = 800)
+    fig.update_layout( autosize= False, width = 800, height = 800, margin={'t':0, 'b':0,'l':0, 'r':0})
     return fig
 
 
+
+
+##################################################################################################################
+# Function: Make the histogram of #citations over time for a given gene
+##################################################################################################################
+def histogram_citationsperyear(gene_id):
+  
+    ## Load histogram of citations for this gene
+    conn = sqlite3.connect("file:data/citations_per_year.sqlite?mode=ro", uri=True)
+    citationsperyear = pd.read_sql_query("SELECT * from citationsperyear where ensembl == ?", conn, params=(gene_id,))
+    conn.close()
+        
+    ##Check if there is any data to plot
+    if citationsperyear.shape[0]==0:
+        #return ""
+        fig = go.Figure()
+        fig.update_layout( autosize= False, width = 200, height = 100, margin={'t':0, 'b':0,'l':0, 'r':0})
+        return fig
+
+    ##Check if any genes should be highlighted
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+      x=citationsperyear["year"].tolist(), 
+      y=citationsperyear["citations"].tolist(), 
+      fill='tozeroy')) # fill down to xaxis
+        
+    fig.update_layout( autosize= False, width = 400, height = 100, margin={'t':0, 'b':0,'l':0, 'r':0})
+    
+    return fig
 
 
 
@@ -290,26 +319,32 @@ app.layout = html.Div([
             'width':'100%'
         }),
         
-        html.Br(),
+        #html.Br(),
 
         #####################################################
         ########## Gene information panel ###################
         #####################################################
         html.Div([
           
-            html.H1(html.Label(id='geneinfo-symbol')),
+            #html.H1(html.Label(id='geneinfo-symbol')),
             html.H4(html.Label(id='geneinfo-longname')),
             html.Label(id="geneinfo-firstcited"),
             html.Label(id="geneinfo-numcitations"),
 
-            html.Br(),
-
+            html.Div([
+              dcc.Graph( id='citationsperyear-histogram')
+            ],style={
+              'display': 'inline-block',
+              'margin': 'auto'
+            }),
+            
             html.Div([
                 html.A(['Ensembl'],    id='ensembl-link',   href='', target='_blank')," | ",
                 html.A(['UniProt'],    id='uniprot-link',   href='', target='_blank')," | ",
                 html.A(['PubMed'],     id='pubmed-link',    href='', target='_blank')," | ",
                 html.A(['Genecards'],  id='genecards-link', href='', target='_blank')
             ])
+
 
         ], style={
             'margin-top':'50px',
@@ -363,25 +398,21 @@ def update_genes_dropdown(dropdown_value):
      Input('color-by-selected', 'value')])
 def update_graph(selected_genes, celltype,coordid,color):
 
-    conn = sqlite3.connect("data/coord_" + coordid + ".sqlite")
+    conn = sqlite3.connect("file:data/coord_" + coordid + ".sqlite?mode=ro", uri=True)
     coord_data = pd.read_sql_query("SELECT * from coord", conn) #Possible to speed up but does not seem worth it
     conn.close()
 
-    conn = sqlite3.connect("data/totfeature.sqlite")
-    celltype_data_view = pd.read_sql_query("SELECT * from feature_matrix where ct == \"" + celltype + "\"", conn)
+    conn = sqlite3.connect("file:data/totfeature.sqlite?mode=ro", uri=True)
+    celltype_data_view = pd.read_sql_query("SELECT * from feature_matrix where ct == ?", conn, params=(celltype,))
     conn.close()
 
     coord_data = coord_data.merge(celltype_data_view,left_on = "gene", right_on = "gene", indicator = True)
-
-    #print(coord_data)
 
     celltype_dependence = celltype_dependence_data.loc[coordid,"perct"]
     if celltype_dependence:
         coord_data_plot = coord_data.loc[:,["gene","x_"+ celltype, "y_"+ celltype, color]].copy()
     else:
         coord_data_plot = coord_data
-
-    #print(coord_data_plot)
 
     return scatterplot(celltype, color, selected_genes, coord_data_plot, celltype_dependence)
     
@@ -393,11 +424,13 @@ def update_graph(selected_genes, celltype,coordid,color):
 @app.callback(
     [
     Output('geneinfo-div',          'style'),
-    Output('geneinfo-symbol',       'children'),
+    #Output('geneinfo-symbol',       'children'),
     Output('geneinfo-longname',     'children'),
     Output('geneinfo-firstcited',   'children'),
     Output('geneinfo-numcitations', 'children'),
     
+    Output('citationsperyear-histogram', 'figure'),
+
     Output('ensembl-link',   'href'),
     Output('uniprot-link',   'href'),
     Output('pubmed-link',    'href'),
@@ -413,9 +446,11 @@ def update_gene_links(gene):
     geneinfo_longname=""
     geneinfo_firstcited=""
     geneinfo_numcitations=""
+    retfig_citationsperyear=""
 
     if len(selected_genes) == 1:
         gene_symbol = gene_symbol[0]
+        gene_id = gene_id[0]
 
         ### Make geneinfo box visible
         style= {
@@ -427,8 +462,8 @@ def update_gene_links(gene):
         }
 
         ### Pull out information about the gene
-        conn = sqlite3.connect("data/geneinfo.sqlite")
-        geneinfo_data = pd.read_sql_query("SELECT * from geneinfo WHERE ensembl=?", conn, params=(gene_id[0],))
+        conn = sqlite3.connect("file:data/geneinfo.sqlite?mode=ro", uri=True)
+        geneinfo_data = pd.read_sql_query("SELECT * from geneinfo WHERE ensembl=?", conn, params=(gene_id,))
         conn.close()
         if geneinfo_data.shape[0]>0:
             geneinfo_data = geneinfo_data.to_dict()
@@ -441,6 +476,11 @@ def update_gene_links(gene):
             
             geneinfo_numcitations = "#Citations: "+str(geneinfo_data["numcitations"][0])
 
+        retfig_citationsperyear = histogram_citationsperyear(gene_id)
+
+        #print(citationsperyear)
+
+
     else:
         gene_symbol=""
         style= {'display': 'none', 'padding':'30px 0 0 30px'}
@@ -451,10 +491,12 @@ def update_gene_links(gene):
     info = (
         style,
         
-        gene_symbol,
+        #gene_symbol,
         geneinfo_longname,
         geneinfo_firstcited,
         geneinfo_numcitations,
+        
+        retfig_citationsperyear,
 
         'https://www.ensembl.org/Mus_musculus/Gene/Summary?g={}'.format(gene),
         'https://www.uniprot.org/uniprot/?query={}&sort=score'.format(gene),
@@ -474,3 +516,17 @@ if __name__ == '__main__':
 
 app = dash.Dash(__name__)
 #viewer.show(app)
+
+
+
+
+
+
+
+
+
+
+
+
+
+

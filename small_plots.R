@@ -18,6 +18,10 @@ get_density <- function(x, y, ...) {
 ########## Produce plot: Histograms of paper distributions ####################################################
 ###############################################################################################################
 
+
+feature_pmidcount <- read.csv("features/feature_ranked_pmid.csv", stringsAsFactors=FALSE)
+
+### First the two histograms
 df <- feature_pmidcount
 p1 <- ggplot(df, aes(x=rank_pmid)) + 
   geom_histogram(bins = 50,color="blue", fill="blue")+
@@ -33,6 +37,22 @@ p2 <- ggplot(df, aes(x=rank_pmid)) +
 ggp <- grid.arrange(p1,p2, nrow=1)
 ggsave("plots/paper_histograms.pdf", ggp, width = 6, height = 3)
 
+
+### Now the pareto fit, and other fits
+
+library(ParetoPosStable)
+df <- feature_pmidcount_ct[feature_pmidcount_ct$ct=="T cell",]
+pdf("plots/fit_pareto.pdf")
+plot(pareto.fit(10^df$rank_pmid-1))
+dev.off()
+
+require(MASS)
+ex <- 10^df$rank_pmid-1
+fit1 <- fitdistr(ex, "exponential") 
+df("plots/fit_exp.pdf")
+hist(ex, freq = FALSE, breaks = 500, xlim = c(0, quantile(ex, 0.99)))
+curve(dexp(x, rate = fit1$estimate), from = 0, col = "red", add = TRUE)
+dev.off()
 
 ###############################################################################################################
 ########## Produce plot: Expression vs papers #################################################################
