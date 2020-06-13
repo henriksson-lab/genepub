@@ -467,7 +467,6 @@ def update_gene_links(gene):
 
 ###################################
 
-
 # run the app on "python app.py";
 # default port: 8050
 if __name__ == '__main__':
