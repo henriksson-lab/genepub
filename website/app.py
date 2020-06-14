@@ -45,7 +45,7 @@ starting_genes = open('data/starting_genes.csv').read().split(',')
 ## List of unique genes
 all_genes = gene_celltype_year_papers['gene'].unique()
 
-
+#################
 # create the gene dropdown for genes with known names (ie. name != ensembl_id)
 # data_genelist is: {"ensg":"gene symbol"}
 data_genelist = pd.read_csv('data/genelist.csv')
@@ -55,10 +55,6 @@ genes_dropdown_options_inv = {v: k for k, v in genes_dropdown_options.items()}
 dropdown_genesymbols_sorted = [ {'label': genes_dropdown_options[key], 'value':key} for key in genes_dropdown_options ]
 dropdown_genesymbols_sorted = sorted(dropdown_genesymbols_sorted, key=lambda t : t["label"])
 
-
-
-#print([ {'label': genes_dropdown_options[key], 'value':key} for key in genes_dropdown_options.keys().sort() ])
-#sys.exit()
 
 # add genes dictionary for genes display (this is a duplicate)   .... TODO, we should not have this twice ideally.
 # Genes dict is: {"ensg":"gene symbol - long name"}
@@ -89,13 +85,17 @@ coordinate_list = {v[0]: v[1] for v in coordinate_list_data[["coord_id","coord_n
 
 ## Load cell types
 conn = sqlite3.connect("file:data/totfeature.sqlite?mode=ro", uri=True)
-celltype_data = pd.read_sql_query("SELECT DISTINCT ct from feature_matrix ORDER BY ct", conn) 
+celltype_data = pd.read_sql_query("SELECT DISTINCT ct from feature_matrix ORDER BY ct", conn)
 celltype_list = celltype_data["ct"]
 conn.close()
 
+
+############################
 ## Load features (to be shown as color)
 feature_data = pd.read_csv("data/feature_long_name.csv")
 feature_list = { v[0]: v[1] for v in feature_data[ ['feature_id', 'feature_long_name']].values }
+
+
 
 ## Load cell types
 celltype_dependence_data = pd.read_csv("data/list_coordinates.csv")
@@ -218,7 +218,7 @@ app.layout = html.Div([
                     dcc.Dropdown(
                     id='genes-dropdown',
                     value ='',
-                    options=dropdown_genesymbols_sorted,  #[ {'label': genes_dropdown_options[key], 'value':key} for key in sorted_list_of_genesymbols ],
+                    options=dropdown_genesymbols_sorted,  
                     placeholder='Select a gene using its name',)
             ], id='genes-dropdown-timestamp', n_clicks_timestamp = 0),
             
@@ -226,7 +226,7 @@ app.layout = html.Div([
             html.Div([html.Label(['Cell type:'])], style = {'display': 'block', 'width': '24%','height': '32px'} ),
             dcc.Dropdown(
                 id='cell-type-selected',
-                value= 'epithelial cell',
+                value= 'T cell',
                 options=[{'label': i, 'value': i} for i in celltype_list],
                 placeholder = 'Cell type'),
                 
@@ -235,7 +235,7 @@ app.layout = html.Div([
             dcc.Dropdown(
                 id='coord-id-selected',
                 placeholder = 'coordinate',
-                options=[{'label': i, 'value': i} for i in coordinate_list],
+                options=[{'label': coordinate_list[i], 'value': i} for i in coordinate_list],
                 value='coexp'),
                 
                 
@@ -243,7 +243,7 @@ app.layout = html.Div([
             dcc.Dropdown(
                 id='color-by-selected',
                 placeholder = 'color by',
-                options=[{'label': i, 'value': i} for i in feature_list],
+                options=[{'label': feature_list[i], 'value': i} for i in feature_list],
                 value='rank_pmid'),
     
             html.Div([
@@ -443,8 +443,11 @@ def update_graph(selected_genes, celltype,coordid,color):
     Output('pubmed-link',    'href'),
     Output('genecards-link', 'href')
     ],
-    [Input('gene-textbox', 'value')])  
-def update_gene_links(gene):
+    [
+      Input('gene-textbox', 'value'),
+      Input('cell-type-selected', 'value')
+    ])  
+def update_gene_links(gene,cell_type):
 
     ##hide genes links if more than a gene is provided
     selected_genes = parse_genes(gene)
@@ -470,7 +473,7 @@ def update_gene_links(gene):
 
         ### Pull out information about the gene
         conn = sqlite3.connect("file:data/geneinfo.sqlite?mode=ro", uri=True)
-        geneinfo_data = pd.read_sql_query("SELECT * from geneinfo WHERE ensembl=?", conn, params=(gene_id,))
+        geneinfo_data = pd.read_sql_query("SELECT * from geneinfo WHERE ensembl=? and ct=?", conn, params=(gene_id,cell_type,))
         conn.close()
         if geneinfo_data.shape[0]>0:
             geneinfo_data = geneinfo_data.to_dict()
@@ -510,7 +513,7 @@ def update_gene_links(gene):
 
         'https://www.ensembl.org/Mus_musculus/Gene/Summary?g={}'.format(gene),
         'https://www.uniprot.org/uniprot/?query={}&sort=score'.format(gene),
-        'https://www.ncbi.nlm.nih.gov/search/all/?term={}'.format(gene),
+        'https://pubmed.ncbi.nlm.nih.gov/?term={}'.format(gene_symbol),   #'https://www.ncbi.nlm.nih.gov/search/all/?term={}'.format(gene),
         'https://www.genecards.org/cgi-bin/carddisp.pl?gene={}&keywords={}'.format(gene_symbol,gene_symbol)
     )
 

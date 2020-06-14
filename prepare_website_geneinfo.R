@@ -14,44 +14,86 @@ dat4$rank_pmid <- 10^(dat4$rank_pmid)-1
 colnames(dat4) <- c("Symbol","numcitations")
 
   
-
+############################################################
 ######################### XGboost ##########################
-dat5 <- read.csv("plots/xgboost.csv",stringsAsFactors = FALSE)
-colnames(dat5) <- c("Symbol","xgscore")
+############################################################
 
-### Scale back predicted #citations
-#final_score = (rank_pmid - mean(allfeat$rank_pmid)) / sd(allfeat$rank_pmid)
-#final_score * sd(allfeat$rank_pmid) + mean(allfeat$rank_pmid) = rank_pmid 
-allfeat <- totfeature[totfeature$ct=="T cell",]
-the_sd <- sd(allfeat$rank_pmid)
-the_mean <- mean(allfeat$rank_pmid)
+all_dat5 <- NULL
+all_xgboost_residual <- NULL
+for(fname in list.files("plots/xgboost_prediction/")){
+  cell_type <- str_split_fixed(fname,pattern = "\\.",2)[1]
+  print(cell_type)
 
-dat5$xgscore <- dat5$xgscore * the_sd + the_mean
-dat5$xgscore <- 10^dat5$xgscore - 1
+  dat5 <- read.csv(sprintf("plots/xgboost_prediction/%s",fname),stringsAsFactors = FALSE)
+  colnames(dat5) <- c("Symbol","xgscore")
+  
+  ### Unscale predicted #citations
+  ### Note: final_score = (rank_pmid - mean(allfeat$rank_pmid)) / sd(allfeat$rank_pmid)
+  allfeat <- totfeature[totfeature$ct=="T cell",]
+  the_sd <- sd(allfeat$rank_pmid)
+  the_mean <- mean(allfeat$rank_pmid)
+  dat5$xgscore <- dat5$xgscore * the_sd + the_mean
+  dat5$xgscore <- 10^dat5$xgscore - 1
 
-temp <- merge(dat5, dat4)
+  ### Generate coordinate system  
+  temp <- merge(dat5, dat4)
+  xgboost_residual <- data.frame(
+    gene=temp$Symbol
+  )
+  xgboost_residual[,sprintf("y_%s",cell_type)] <- log10(temp$xgscore+1) - log10(temp$numcitations+1)
+  xgboost_residual <- xgboost_residual[order(xgboost_residual[,sprintf("y_%s",cell_type)]),]
+  xgboost_residual[,sprintf("x_%s",cell_type)] <- 1:nrow(xgboost_residual)
+  
+  if(is.null(all_xgboost_residual)){
+    all_xgboost_residual <- xgboost_residual
+  } else {
+    all_xgboost_residual <- merge(all_xgboost_residual, xgboost_residual)
+  }
+  
+  #store_website_coordinates("residual_xg",xgboost_residual)
+  dat5$ct <- cell_type
+  all_dat5 <- rbind(
+    all_dat5, dat5
+  )
+}
+store_website_coordinates("residual_xg",all_xgboost_residual)
 
-xgboost_residual <- data.frame(
-  gene=temp$Symbol,
-  y=log10(temp$xgscore+1) - log10(temp$numcitations+1)
-)
-xgboost_residual <- xgboost_residual[order(xgboost_residual$y),]
-xgboost_residual$x <- 1:nrow(xgboost_residual)
+# dat5 <- read.csv("plots/xgboost.csv",stringsAsFactors = FALSE)
+# colnames(dat5) <- c("Symbol","xgscore")
+# 
+# ### Scale back predicted #citations
+# #final_score = (rank_pmid - mean(allfeat$rank_pmid)) / sd(allfeat$rank_pmid)
+# #final_score * sd(allfeat$rank_pmid) + mean(allfeat$rank_pmid) = rank_pmid 
+# allfeat <- totfeature[totfeature$ct=="T cell",]
+# the_sd <- sd(allfeat$rank_pmid)
+# the_mean <- mean(allfeat$rank_pmid)
+# 
+# dat5$xgscore <- dat5$xgscore * the_sd + the_mean
+# dat5$xgscore <- 10^dat5$xgscore - 1
+# 
+# temp <- merge(dat5, dat4)
+# 
+# xgboost_residual <- data.frame(
+#   gene=temp$Symbol,
+#   y=log10(temp$xgscore+1) - log10(temp$numcitations+1)
+# )
+# xgboost_residual <- xgboost_residual[order(xgboost_residual$y),]
+# xgboost_residual$x <- 1:nrow(xgboost_residual)
 
-store_website_coordinates("residual_xg",xgboost_residual)
 
 
 
-#############################################################
-
-
+############################################################
 ###### merge it all
-mdat <- unique(merge(merge(merge(merge(dat2,dat),dat3,all.x = TRUE),dat4,all.x = TRUE),dat5))
+############################################################
+
+
+mdat <- unique(merge(merge(merge(merge(dat2,dat),dat3,all.x = TRUE),dat4,all.x = TRUE),all_dat5))
 mdat$firstyear[is.na(mdat$firstyear)] <- -10
 mdat$numcitations[is.na(mdat$numcitations)] <- 0
 mdat$numcitations <- as.integer(mdat$numcitations)
 
-colnames(mdat) <- c("symbol","nih_geneid","ensembl","description","firstyear","numcitations","xgscore")
+colnames(mdat) <- c("symbol","nih_geneid","ensembl","description","firstyear","numcitations","xgscore","ct")
 
 library(RSQLite)
 con <- dbConnect(SQLite(), dbname = "website/data/geneinfo.sqlite")
@@ -61,9 +103,22 @@ dbDisconnect(con)
 
 #need to undo the scaling!
 
+############################################################
+######################### Genelist #########################
+############################################################
 
-##############################
+write.table(
+  unique(data.frame(
+    Ensembl.Gene.ID=mdat$ensembl,
+    Associated.Gene.Name=mdat$symbol
+  )), "website/data/genelist.csv", row.names = FALSE, quote = TRUE, sep=",")
+
+
+
+
+############################################################
 ## Histogram of papers for each gene
+############################################################
 
 
 df <- feature_pmidcount

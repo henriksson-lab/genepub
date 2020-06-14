@@ -2,7 +2,7 @@ feature_id,feature_long_name
 rank_pmid,#Citations
 nearby_pmid,Chromatin nearby avg(#citations)
 coexp10,Co-expression partners
-perc_dependent_cells,Essentiality
+essentiality_global,Essentiality
 rank_exp,Expression (RNA)
 ppi,PPI partners
 family_indexdiff,Family index
