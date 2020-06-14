@@ -1,6 +1,4 @@
 coord_id,coord_name,perct
 chrom,Chromatin proximity,false
 coexp,Co-expression network,true
-homology,Homology,false
-PPI,Protein-protein interaction network,false
-residual,Sorted by model fit residual,true
+residual_xg,Sorted by XG model fit residual,false

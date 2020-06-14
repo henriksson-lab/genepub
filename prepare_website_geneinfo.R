@@ -14,12 +14,44 @@ dat4$rank_pmid <- 10^(dat4$rank_pmid)-1
 colnames(dat4) <- c("Symbol","numcitations")
 
   
-mdat <- unique(merge(merge(merge(dat2,dat),dat3,all.x = TRUE),dat4,all.x = TRUE))
+
+######################### XGboost ##########################
+dat5 <- read.csv("plots/xgboost.csv",stringsAsFactors = FALSE)
+colnames(dat5) <- c("Symbol","xgscore")
+
+### Scale back predicted #citations
+#final_score = (rank_pmid - mean(allfeat$rank_pmid)) / sd(allfeat$rank_pmid)
+#final_score * sd(allfeat$rank_pmid) + mean(allfeat$rank_pmid) = rank_pmid 
+allfeat <- totfeature[totfeature$ct=="T cell",]
+the_sd <- sd(allfeat$rank_pmid)
+the_mean <- mean(allfeat$rank_pmid)
+
+dat5$xgscore <- dat5$xgscore * the_sd + the_mean
+dat5$xgscore <- 10^dat5$xgscore - 1
+
+temp <- merge(dat5, dat4)
+
+xgboost_residual <- data.frame(
+  gene=temp$Symbol,
+  y=log10(temp$xgscore+1) - log10(temp$numcitations+1)
+)
+xgboost_residual <- xgboost_residual[order(xgboost_residual$y),]
+xgboost_residual$x <- 1:nrow(xgboost_residual)
+
+store_website_coordinates("residual_xg",xgboost_residual)
+
+
+
+#############################################################
+
+
+###### merge it all
+mdat <- unique(merge(merge(merge(merge(dat2,dat),dat3,all.x = TRUE),dat4,all.x = TRUE),dat5))
 mdat$firstyear[is.na(mdat$firstyear)] <- -10
 mdat$numcitations[is.na(mdat$numcitations)] <- 0
 mdat$numcitations <- as.integer(mdat$numcitations)
 
-colnames(mdat) <- c("symbol","nih_geneid","ensembl","description","firstyear","numcitations")
+colnames(mdat) <- c("symbol","nih_geneid","ensembl","description","firstyear","numcitations","xgscore")
 
 library(RSQLite)
 con <- dbConnect(SQLite(), dbname = "website/data/geneinfo.sqlite")
@@ -27,7 +59,7 @@ dbWriteTable(con, "geneinfo", mdat, overwrite=TRUE)
 dbDisconnect(con)
 
 
-
+#need to undo the scaling!
 
 
 ##############################
@@ -66,26 +98,4 @@ con <- dbConnect(SQLite(), dbname = "website/data/citations_per_year.sqlite")
 dbWriteTable(con, "citationsperyear", matcum_geneyear, overwrite=TRUE)
 dbDisconnect(con)
 
-# import plotly.express as px
-# df = px.data.tips()
-# fig = px.histogram(df, x="total_bill")
-# fig.show()
 
-
-# 
-# 
-# dcc.Graph(
-#   id='papertime-histogram',
-#   figure={
-#     'data': [
-#       {
-#         'x': df['year'],
-#         'text': df['STRCITY'],
-#         'customdata': df['storenum'],
-#         'name': 'Open Date',
-#         'type': 'histogram'
-#       }
-#       ],
-#     'layout': {}
-#   }
-# ),

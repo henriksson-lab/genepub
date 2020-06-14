@@ -52,6 +52,14 @@ data_genelist = pd.read_csv('data/genelist.csv')
 genes_dropdown_options = { v[0]: v[1] for v in data_genelist[ ['Ensembl.Gene.ID', 'Associated.Gene.Name'] ].values }
 genes_dropdown_options_inv = {v: k for k, v in genes_dropdown_options.items()}
 
+dropdown_genesymbols_sorted = [ {'label': genes_dropdown_options[key], 'value':key} for key in genes_dropdown_options ]
+dropdown_genesymbols_sorted = sorted(dropdown_genesymbols_sorted, key=lambda t : t["label"])
+
+
+
+#print([ {'label': genes_dropdown_options[key], 'value':key} for key in genes_dropdown_options.keys().sort() ])
+#sys.exit()
+
 # add genes dictionary for genes display (this is a duplicate)   .... TODO, we should not have this twice ideally.
 # Genes dict is: {"ensg":"gene symbol - long name"}
 genes_dict = pd.read_csv('data/mus_musculus_genes_dictionary.csv')
@@ -210,7 +218,7 @@ app.layout = html.Div([
                     dcc.Dropdown(
                     id='genes-dropdown',
                     value ='',
-                    options=[ {'label': genes_dropdown_options[key], 'value':key} for key in genes_dropdown_options ],
+                    options=dropdown_genesymbols_sorted,  #[ {'label': genes_dropdown_options[key], 'value':key} for key in sorted_list_of_genesymbols ],
                     placeholder='Select a gene using its name',)
             ], id='genes-dropdown-timestamp', n_clicks_timestamp = 0),
             
@@ -265,6 +273,7 @@ app.layout = html.Div([
             html.H4(html.Label(id='geneinfo-longname')),
             html.Label(id="geneinfo-firstcited"),
             html.Label(id="geneinfo-numcitations"),
+            html.Label(id="geneinfo-numcitations-xg"),
 
             html.Div([
               dcc.Graph( id='citationsperyear-histogram')
@@ -425,6 +434,7 @@ def update_graph(selected_genes, celltype,coordid,color):
     Output('geneinfo-longname',     'children'),
     Output('geneinfo-firstcited',   'children'),
     Output('geneinfo-numcitations', 'children'),
+    Output('geneinfo-numcitations-xg', 'children'),
     
     Output('citationsperyear-histogram', 'figure'),
 
@@ -464,7 +474,7 @@ def update_gene_links(gene):
         conn.close()
         if geneinfo_data.shape[0]>0:
             geneinfo_data = geneinfo_data.to_dict()
-            geneinfo_longname     = geneinfo_data["description"][0]
+            geneinfo_longname     = geneinfo_data["description"][0].capitalize()
             
             if geneinfo_data["firstyear"][0]<0:
                 geneinfo_firstcited   = "First cited: N/A"
@@ -475,11 +485,13 @@ def update_gene_links(gene):
 
         retfig_citationsperyear = histogram_citationsperyear(gene_id)
 
+        geneinfo_numcitations_xg = "Predicted #Citations (XG): "+str(int(geneinfo_data["xgscore"][0]))
         #print(citationsperyear)
 
 
     else:
         gene_symbol=""
+        geneinfo_numcitations_xg=-1
         style= {'display': 'none', 'padding':'30px 0 0 30px'}
 
 
@@ -492,6 +504,7 @@ def update_gene_links(gene):
         geneinfo_longname,
         geneinfo_firstcited,
         geneinfo_numcitations,
+        geneinfo_numcitations_xg,
         
         retfig_citationsperyear,
 
@@ -513,17 +526,6 @@ if __name__ == '__main__':
 
 app = dash.Dash(__name__)
 #viewer.show(app)
-
-
-
-
-
-
-
-
-
-
-
 
 
 

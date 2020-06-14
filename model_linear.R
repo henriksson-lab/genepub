@@ -523,3 +523,8 @@ ggplot(thelm_coef, aes(fill=condition, y=coef,x=n)) +
   geom_text(aes(label = condition), position = position_stack(vjust = 0.5)) +
   theme(legend.position = "none")
 ggsave("plots/SimpleXG_out_weight.pdf")
+
+
+
+
+

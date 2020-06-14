@@ -107,12 +107,13 @@ store_website_coordinates <- function(name,coord) {
 ###############################################
 ## Function: Layout a graph (data frame), return coordinates
 graph_layout_to_df <- function(graph_df, ct=NULL) {
-  
+
   ## Do the layout
   igg <- graph_from_data_frame(graph_df, directed = FALSE, vertices = NULL)
   #lay <- layout_with_dh(igg, )  # too slow?
-  #lay <- layout_with_kk(igg, )  # nice speed. not tested
-  lay <- layout_with_fr(igg, )
+#  lay <- layout_with_kk(igg, )  # nice speed. not tested
+  #lay <- layout_with_fr(igg, )
+  lay <- layout_with_lgl(igg, )  # nice speed. not tested
   
   ## Figure out column names
   if(is.null(ct)){
@@ -132,6 +133,16 @@ graph_layout_to_df <- function(graph_df, ct=NULL) {
   
   df
 }
+
+if(FALSE){
+  igg <- graph_from_data_frame(graph_homology, directed = FALSE, vertices = NULL)
+  igg
+  
+  foo <- graph_layout_to_df(graph_homology)
+  plot(foo$x, foo$y)
+}
+#store_website_coordinates("homology",graph_layout_to_df(graph_homology))
+
 
 
 
@@ -748,7 +759,7 @@ head(feature_tad)
 #colnames(graph_homology) <- c("from","to")
 
 ## Read reduced homology graph
-graph_homology <- read.csv("homology/homology_graph.red.csv")[,c("from","to")]
+graph_homology <- read.csv("homology/homology_graph.red.csv", stringsAsFactors = FALSE)[,c("from","to")]
 
 ## Generate feature: homology neighbour #PMID
 feature_homology_pmid <- calc_neigh_pmid(graph_homology, feature_pmidcount, "homology_pmid")
@@ -762,8 +773,8 @@ write.csv(
 ## Store graph for website use
 store_website_coordinates("homology",graph_layout_to_df(graph_homology))
 
-
-
+foo <- graph_layout_to_df(graph_homology)
+plot(foo$x, foo$y)
 
 
 ## Quick check of correlation
