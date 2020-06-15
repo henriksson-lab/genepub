@@ -1,4 +1,4 @@
 coord_id,coord_name,perct
-chrom,Chromatin proximity,false
+chrom,Chromosome position,false
 coexp,Co-expression network,true
 residual_xg,Sorted by XG model fit residual,true

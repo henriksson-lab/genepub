@@ -160,12 +160,12 @@ def parse_genes(genes_textbox):
 # Function: Make the histogram of #citations over time for a given gene
 ##################################################################################################################
 def histogram_citationsperyear(gene_id):
-  
+
     ## Load histogram of citations for this gene
     conn = sqlite3.connect("file:data/citations_per_year.sqlite?mode=ro", uri=True)
     citationsperyear = pd.read_sql_query("SELECT * from citationsperyear where ensembl == ?", conn, params=(gene_id,))
     conn.close()
-        
+
     ##Check if there is any data to plot
     if citationsperyear.shape[0]==0:
         fig = go.Figure()
@@ -175,12 +175,12 @@ def histogram_citationsperyear(gene_id):
     ##Check if any genes should be highlighted
     fig = go.Figure()
     fig.add_trace(go.Scatter(
-      x=citationsperyear["year"].tolist(), 
-      y=citationsperyear["citations"].tolist(), 
+      x=citationsperyear["year"].tolist(),
+      y=citationsperyear["citations"].tolist(),
       fill='tozeroy')) # fill down to xaxis
-        
+
     fig.update_layout( autosize= False, width = 400, height = 100, margin={'t':0, 'b':0,'l':0, 'r':0})
-    
+
     return fig
 
 
@@ -202,9 +202,9 @@ app.title = "Data viewer: 10 reasons to study a gene"
 app.layout = html.Div([
     html.Div([
         html.Div([
-    
+
             # textbox for selecting genes using ensembl id or names; all plots updates are connected to this element
-            html.Label('Selected gene:'), 
+            html.Label('Selected gene:'),
             dcc.Input(
                 id='gene-textbox',
                 type='text',
@@ -212,40 +212,40 @@ app.layout = html.Div([
                 #list='list-suggested-inputs',  #Don't suggest EnsemblIDs
                 placeholder='Comma-separated list of genes to inspect',
                 style={'width': '100%', 'height': '40px'}
-            ),            
+            ),
             # gene selection through dropdown; this will add the gene id to the textbox above
             html.Div([
                     dcc.Dropdown(
                     id='genes-dropdown',
                     value ='',
-                    options=dropdown_genesymbols_sorted,  
+                    options=dropdown_genesymbols_sorted,
                     placeholder='Select a gene using its name',)
-            ], id='genes-dropdown-timestamp', n_clicks_timestamp = 0),
-            
-            
+            ], id='genes-dropdown-timestamp', n_clicks_timestamp = 1),
+
+
             html.Div([html.Label(['Cell type:'])], style = {'display': 'block', 'width': '24%','height': '32px'} ),
             dcc.Dropdown(
                 id='cell-type-selected',
                 value= 'T cell',
                 options=[{'label': i, 'value': i} for i in celltype_list],
                 placeholder = 'Cell type'),
-                
-                
+
+
             html.Div([html.Label(['Coordinates:'])], style = {'display': 'block', 'width': '24%','height': '32px'} ),
             dcc.Dropdown(
                 id='coord-id-selected',
                 placeholder = 'coordinate',
                 options=[{'label': coordinate_list[i], 'value': i} for i in coordinate_list],
                 value='coexp'),
-                
-                
+
+
             html.Div([html.Label(['Color by:'])], style = {'display': 'block', 'width': '24%','height': '32px'} ),
             dcc.Dropdown(
                 id='color-by-selected',
                 placeholder = 'color by',
                 options=[{'label': feature_list[i], 'value': i} for i in feature_list],
                 value='rank_pmid'),
-    
+
             html.Div([
                 html.A([
                     html.Img(src=app.get_asset_url('MIMS_logo_blue.svg'), style={
@@ -254,21 +254,21 @@ app.layout = html.Div([
                            'padding': '10px 10px'}),
                 ], href='http://www.mims.umu.se/')
             ], style={'text-align':'right'})
-                  
+
         ], style={
             'border': 'thin lightgrey solid',
             'backgroundColor': 'rgb(250, 250, 250)',
             'padding': '10px 5px',
             'width':'100%'
         }),
-        
+
         #html.Br(),
 
         #####################################################
         ########## Gene information panel ###################
         #####################################################
         html.Div([
-          
+
             #html.H1(html.Label(id='geneinfo-symbol')),
             html.H4(html.Label(id='geneinfo-longname')),
             html.Label(id="geneinfo-firstcited"),
@@ -281,7 +281,7 @@ app.layout = html.Div([
               'display': 'inline-block',
               'margin': 'auto'
             }),
-            
+
             html.Div([
                 html.A(['Ensembl'],    id='ensembl-link',   href='', target='_blank')," | ",
                 html.A(['UniProt'],    id='uniprot-link',   href='', target='_blank')," | ",
@@ -305,13 +305,13 @@ app.layout = html.Div([
       'margin': '0 auto'
     }),
 ],style={
-  'position': 'inline-block', 
-  'width': '95%', 
-  'height': '95%', 
+  'position': 'inline-block',
+  'width': '95%',
+  'height': '95%',
   'margin': '0 auto', #supposed to center it... but meah.
   'padding':'0',
   'overflow':'hidden'
-}) 
+})
 
 
 ##################################################################################################################
@@ -331,9 +331,11 @@ def update_genes_dropdown(dropdown_value):
     if dropdown_value is None:
         return ''
     else:
+        # import pdb; pdb.set_trace()
+        # print(type(dropdown_value))
         return dropdown_value
-        
-        
+
+
 ##################################################################################################################
 # Function: Make the scatter plot for all the genes
 ##################################################################################################################
@@ -395,10 +397,10 @@ def update_graph(selected_genes, celltype,coordid,color):
     #Create the basic plot
     fig = go.Figure(
         go.Scatter(
-            x = xaxis, 
-            y = yaxis, 
+            x = xaxis,
+            y = yaxis,
             mode = "markers",
-            marker_color = markercolor, 
+            marker_color = markercolor,
             text = textvalues,
             opacity = 1.0))
 
@@ -406,21 +408,21 @@ def update_graph(selected_genes, celltype,coordid,color):
     shapes_y=[{'type': 'line',
                         'y0':y_intercept,
                         'y1':y_intercept,
-                        'x0':str(min(xaxis)), 
+                        'x0':str(min(xaxis)),
                         'x1':str(max(xaxis)),
-                        'line': {'color': 'black', 'width': 1, 'dash': 'dot'}} 
+                        'line': {'color': 'black', 'width': 1, 'dash': 'dot'}}
                    for i, y_intercept in enumerate(hlines)]
     shapes_x=[{'type': 'line',
                         'x0':x_intercept,
                         'x1':x_intercept,
-                        'y0':str(min(yaxis)), 
+                        'y0':str(min(yaxis)),
                         'y1':str(max(yaxis)),
-                        'line': {'color': 'black', 'width': 1, 'dash': 'dot'}} 
+                        'line': {'color': 'black', 'width': 1, 'dash': 'dot'}}
                    for i, x_intercept in enumerate(vlines)]
     fig.layout.update(shapes=shapes_x+shapes_y)
-        
+
     fig.update_layout( autosize= False, width = 800, height = 800, margin={'t':0, 'b':0,'l':0, 'r':0})
-    return fig    
+    return fig
 
 
 
@@ -435,7 +437,7 @@ def update_graph(selected_genes, celltype,coordid,color):
     Output('geneinfo-firstcited',   'children'),
     Output('geneinfo-numcitations', 'children'),
     Output('geneinfo-numcitations-xg', 'children'),
-    
+
     Output('citationsperyear-histogram', 'figure'),
 
     Output('ensembl-link',   'href'),
@@ -446,7 +448,7 @@ def update_graph(selected_genes, celltype,coordid,color):
     [
       Input('gene-textbox', 'value'),
       Input('cell-type-selected', 'value')
-    ])  
+    ])
 def update_gene_links(gene,cell_type):
 
     ##hide genes links if more than a gene is provided
@@ -478,12 +480,12 @@ def update_gene_links(gene,cell_type):
         if geneinfo_data.shape[0]>0:
             geneinfo_data = geneinfo_data.to_dict()
             geneinfo_longname     = geneinfo_data["description"][0].capitalize()
-            
+
             if geneinfo_data["firstyear"][0]<0:
                 geneinfo_firstcited   = "First cited: N/A"
             else:
                 geneinfo_firstcited   = "First cited: "+str(int(geneinfo_data["firstyear"][0]))
-            
+
             geneinfo_numcitations = "#Citations: "+str(geneinfo_data["numcitations"][0])
 
         retfig_citationsperyear = histogram_citationsperyear(gene_id)
@@ -502,18 +504,18 @@ def update_gene_links(gene,cell_type):
     gene = gene.strip()
     info = (
         style,
-        
+
         #gene_symbol,
         geneinfo_longname,
         geneinfo_firstcited,
         geneinfo_numcitations,
         geneinfo_numcitations_xg,
-        
+
         retfig_citationsperyear,
 
         'https://www.ensembl.org/Mus_musculus/Gene/Summary?g={}'.format(gene),
         'https://www.uniprot.org/uniprot/?query={}&sort=score'.format(gene),
-        'https://pubmed.ncbi.nlm.nih.gov/?term={}'.format(gene_symbol),   #'https://www.ncbi.nlm.nih.gov/search/all/?term={}'.format(gene),
+        'https://pubmed.ncbi.nlm.nih.gov/?term={}'.format(gene_symbol),
         'https://www.genecards.org/cgi-bin/carddisp.pl?gene={}&keywords={}'.format(gene_symbol,gene_symbol)
     )
 
@@ -521,6 +523,23 @@ def update_gene_links(gene,cell_type):
 
 
 ###################################
+@app.callback(Output('genes-dropdown', 'value'),
+    [Input('scatter-plot', 'clickData')])
+
+###################################
+def update_gene_textbox(value):
+
+    # print(value)
+    if value is None:
+        return ''
+    else:
+        # print(value)
+        pointed_gene = (value['points'])[0]['text']
+        # print(pointed_gene)
+        # print(str(convert_genenames_to_ensg([pointed_gene])).strip("['']"))
+        return str(convert_genenames_to_ensg([pointed_gene])).strip("['']")
+###################################
+######################################
 
 # run the app on "python app.py";
 # default port: 8050
@@ -529,6 +548,3 @@ if __name__ == '__main__':
 
 app = dash.Dash(__name__)
 #viewer.show(app)
-
-
-
