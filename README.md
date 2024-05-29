@@ -1,7 +1,7 @@
 # Meta analysis on gene popularity; less than half gene citations stem from gene regulatory networks
 
 This is the supplementary code for the paper "Meta analysis on gene popularity; less than half gene citations stem from gene regulatory networks" by
-Ionut Sebastian Mihai, Debojyoti Das, Gabija Maršalka and Johan Henriksson (corresponding).
+Ionut Sebastian Mihai , Debojyoti Das, Gabija Maršalka and Johan Henriksson (corresponding).
 
 *Laboratory of Molecular Infection Medicine Sweden (MIMS), 
 Umeå Centre for Microbial Research, Department of Molecular Biology, Umeå University, Umeå, Sweden*
