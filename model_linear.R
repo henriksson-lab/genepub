@@ -1,14 +1,12 @@
 library(reshape2)
 library(gridExtra)
 
-
 lm_rmse <- function(res){
   RSS <- c(crossprod(res$residuals))
   MSE <- RSS / length(res$residuals)
   RMSE <- sqrt(MSE)
   RMSE
 }
-
 
 
 
